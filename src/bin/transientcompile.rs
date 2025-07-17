@@ -2,23 +2,23 @@
 //! Currently under development.
 
 /*
-    0x01: MOV byte from source1 into destination
-    0x02: ADD source1 and source2 and store result in destination
-    0x03: SUB source2 from source1 and store result in destination
-    0x04: MUL source1 and source2 and store result in destination
-    0x05: DIV source1 by source2 and store result in destination (truncated)
-    0x06: DIV source1 by source2 and store result in destination (rounded)
-    0x07: REM divides source1 by source2 and stores the remainder in destination
-    0x08: CGT compare if source1 is greater than source2, and if so, store 1 in destination
-    0x09: CLT compare if source1 is less than source2, and if so, store 1 in destination
-    0x0A: JMP stops current execution and jumps to code in source1
-    0x0B: JIE stops current execution and jumps to code in source1 ONLY IF source2 is non-zero
-    0x0C: JNE stops current execution and jumps to code in source1 ONLY IF source2 is zero
-    0x0D: PUT prints data at source1 to the screen (int)
-    0x0E: PUT prints data at source1 to the screen (char)
-    0x0F: IMZ gets the image size that was loaded to ROM and stores it in destination
-    0x10: EQU compare if source1 and source2 are equal, and if so, store 1 in destination
-    0xFF: HLT halts execution and stops processor
+0x01: MOV byte from source1 into destination
+0x02: ADD source1 and source2 and store result in destination
+0x03: SUB source2 from source1 and store result in destination
+0x04: MUL source1 and source2 and store result in destination
+0x05: DIV source1 by source2 and store result in destination (truncated)
+0x06: DIV source1 by source2 and store result in destination (rounded)
+0x07: REM divides source1 by source2 and stores the remainder in destination
+0x08: CGT compare if source1 is greater than source2, and if so, store 1 in destination
+0x09: CLT compare if source1 is less than source2, and if so, store 1 in destination
+0x0A: JMP stops current execution and jumps to code in source1
+0x0B: JIE stops current execution and jumps to code in source1 ONLY IF source2 is non-zero
+0x0C: JNE stops current execution and jumps to code in source1 ONLY IF source2 is zero
+0x0D: PUT prints data at source1 to the screen (int)
+0x0E: PUT prints data at source1 to the screen (char)
+0x0F: IMZ gets the image size that was loaded to ROM and stores it in destination
+0x10: EQU compare if source1 and source2 are equal, and if so, store 1 in destination
+0xFF: HLT halts execution and stops processor
 */
 
 use std::collections::HashMap;
@@ -77,6 +77,25 @@ fn preprocess_source_code(
     let mut source_code = source_code;
 
     // Pass 1
+    // Include all external libraries
+    let mut libcollection: Vec<Vec<String>> = Vec::new();
+    for line in source_code.iter_mut() {
+        if !line.starts_with("*lib ") {
+            continue;
+        }
+        let libname: String = line[5..].to_owned();
+        let libcontent = std::fs::read_to_string(format!("{libname}")).unwrap_or_else(|_| { halt_compilation("[E011] Failed to load library, check permissions and path", &line)});
+        libcollection.push(libcontent.split("\n").map(|x| {x.to_owned()}).collect());
+        *line = "".to_owned();
+    }
+
+    for libcontent in libcollection {
+        for line in libcontent {
+            source_code.push(line);
+        }
+    }
+
+    // Pass 1
     // Remove all comments
     source_code.retain(|x| !x.starts_with("//"));
 
@@ -85,19 +104,15 @@ fn preprocess_source_code(
     let mut intermediates: HashMap<u64, (usize, usize)> = HashMap::new();
     for line in source_code.iter() {
         let line_tokens: Vec<String> = line.split(" ").map(|x| x.to_owned()).collect();
-        for token in line_tokens {
-            if !token.starts_with("!") {
+        if line.starts_with("set") {
+            continue;
+        }
+        for token in &line_tokens {
+            if !token.parse::<usize>().is_ok() {
                 continue;
             }
-            let intermediate_parts: Vec<String> = token.split("_").map(|x| x.to_owned()).collect();
-            if intermediate_parts.len() != 2 {
-                halt_compilation(
-                    "[E011] Intermediate syntax incorrect. Did you remember to specify the size?",
-                    line,
-                );
-            }
-            let size = usize::from_str_radix(&intermediate_parts[0][1..], 10).unwrap_or_else(|_| { halt_compilation("[E003] Failed to parse size: Did you remember to specify the size of the operation?", &line)});
-            let value = usize::from_str_radix(&intermediate_parts[1], 10).unwrap_or_else(|_| {
+            let size = 64;
+            let value = token.parse::<usize>().unwrap_or_else(|_| {
                 halt_compilation(
                     "[E012] Failed to parse intermediate value: Only integers are allowed",
                     &line,
@@ -115,10 +130,13 @@ fn preprocess_source_code(
     // Pass 3
     // Insert new intermediate variable declarations
     for (hash, (value, size)) in intermediates.iter() {
-        source_code.insert(0, format!("set{size} ${hash} {value}"));
         for line in source_code.iter_mut() {
-            *line = line.replace(&format!("!{size}_{value}"), &format!("${hash}"));
+            if line.len() >= 3 && &line[..3] == "set" {
+                continue;
+            }
+            *line = line.replace(&format!("{value}"), &format!("__internal_{hash}"));
         }
+        source_code.insert(0, format!("set __internal_{hash} {value}"));
     }
 
     // Pass 4
@@ -127,9 +145,9 @@ fn preprocess_source_code(
     for line in &source_code {
         // Check if it's actual IR
         if !line.is_empty()
-            && !line.starts_with("#")
-            && !line.starts_with("//")
-            && !line.starts_with("set")
+        && !line.starts_with("#")
+        && !line.starts_with("//")
+        && !line.starts_with("set")
         {
             lines_of_ir += 1;
         }
@@ -139,7 +157,7 @@ fn preprocess_source_code(
     // Pass 5
     // Build hashmap of variables to memory
     let mut memory_map: HashMap<String, (usize, u64, usize)> = HashMap::new(); // Address, value,
-                                                                               // size
+    // size
     let mut memory_offset = 0usize;
     for line in &source_code {
         // Skip if not declaration
@@ -148,39 +166,33 @@ fn preprocess_source_code(
         }
         // set{bits} $variable value
         let line_tokens: Vec<String> = line.split(" ").map(|x| x.to_owned()).collect();
-        if line_tokens.len() != 3 {
+        if line_tokens.len() != 3 && line_tokens.len() != 2 {
             halt_compilation(
-                "[E001] Invalid set syntax: Did you remember to initialize the variable?",
-                line,
-            );
-        }
-        if !line_tokens[1].starts_with("$") {
-            halt_compilation(
-                "[E002] Invalid variable: Did you remember to preface it with a dollar sign? ($)",
+                "[E001] Invalid set syntax: Number of arguments are invalid.",
                 line,
             );
         }
         // Check if variable exists
-        if memory_map.get(&line_tokens[1][1..]).is_some() {
+        if memory_map.get(&line_tokens[1]).is_some() {
             halt_compilation(
                 "[E010] Variable memory collision: Did you initialize the same variable twice?",
                 &line,
             );
         }
-        let size = match usize::from_str_radix(&line_tokens[0][3..], 10) {
-            Ok(x) => x / 8,
-            Err(..) => halt_compilation("[E003] Failed to parse size: Did you remember to specify the size of the operation?", line),
-        };
-        let value = match u64::from_str_radix(&line_tokens[2], 10) {
-            Ok(x) => x,
-            Err(..) => halt_compilation(
-                "[E004] Failed to parse value: Only integer values are allowed",
-                line,
-            ),
-        };
+        let size = 8usize;
+        let mut value = 0;
+        if (line_tokens.len() == 3) {
+            value = match u64::from_str_radix(&line_tokens[2], 10) {
+                Ok(x) => x,
+                Err(..) => halt_compilation(
+                    "[E004] Failed to parse value: Only integer values are allowed",
+                    line,
+                ),
+            };
+        }
 
         memory_map.insert(
-            line_tokens[1][1..].to_string(),
+            line_tokens[1].to_string(),
             (ir_size_bytes + memory_offset, value, size),
         );
         memory_offset += size
@@ -191,6 +203,112 @@ fn preprocess_source_code(
     source_code.retain(|line| !line.is_empty() && !line.starts_with("set"));
 
     // Pass 7
+    // Calculate pointer-based memory address references
+    for line in source_code.iter_mut() {
+        let line_tokens: Vec<String> = line.split(" ").map(|x| x.to_owned()).collect();
+        let mut address_references: HashMap<String, usize> = HashMap::new();
+        for token in line_tokens {
+            if !token.starts_with("&") {
+                continue;
+            }
+            // let (address, value, size) = memory_map[token[1..]];
+            let address = memory_map.get(&token[1..].to_owned()).unwrap_or_else(|| { halt_compilation("[E006] Memory resolution failed: Try checking your spelling", &line) }).0;
+
+            address_references.insert(token[1..].to_owned(), address);
+            // *token = address.to_string().as_str();
+            // source_code.insert(0, format!("set __internal_{hash} {value}"));
+        }
+        for (ptr_ref, address) in address_references {
+            *line = line.replace(&format!("&{ptr_ref}"), &format!("{address}"));
+        }
+    }
+
+    // Pass 8
+    // Recalculate new pointer-based intermediates
+    let mut intermediates: HashMap<u64, (usize, usize)> = HashMap::new();
+    for line in source_code.iter() {
+        let line_tokens: Vec<String> = line.split(" ").map(|x| x.to_owned()).collect();
+        if line.starts_with("set") {
+            continue;
+        }
+        for token in &line_tokens {
+            if !token.parse::<usize>().is_ok() {
+                continue;
+            }
+            let size = 64;
+            let value = token.parse::<usize>().unwrap_or_else(|_| {
+                halt_compilation(
+                    "[E012] Failed to parse intermediate value: Only integers are allowed",
+                    &line,
+                )
+            });
+            let mut hasher = DefaultHasher::new();
+            token.hash(&mut hasher);
+            let hash = hasher.finish();
+            if intermediates.get(&hash).is_some() {
+                continue;
+            }
+            intermediates.insert(hash, (value, size));
+        }
+    }
+    // Pass 9
+    // Insert new poiner-based intermediate variable declarations
+    for (hash, (value, size)) in intermediates.iter() {
+        for line in source_code.iter_mut() {
+            if line.len() >= 3 && &line[..3] == "set" {
+                continue;
+            }
+            *line = line.replace(&format!("{value}"), &format!("__internal_{hash}"));
+        }
+        source_code.insert(0, format!("set __internal_{hash} {value}"));
+    }
+
+    // Pass 10
+    // Appends memory map with variable reference declarations
+    for line in &source_code {
+        // Skip if not declaration
+        if !line.starts_with("set") {
+            continue;
+        }
+        // set{bits} $variable value
+        let line_tokens: Vec<String> = line.split(" ").map(|x| x.to_owned()).collect();
+        if line_tokens.len() != 3 && line_tokens.len() != 2 {
+            halt_compilation(
+                "[E001] Invalid set syntax: Number of arguments are invalid.",
+                line,
+            );
+        }
+        // Check if variable exists
+        if memory_map.get(&line_tokens[1]).is_some() {
+            halt_compilation(
+                "[E010] Variable memory collision: Did you initialize the same variable twice?",
+                &line,
+            );
+        }
+        let size = 8usize;
+        let mut value = 0;
+        if (line_tokens.len() == 3) {
+            value = match u64::from_str_radix(&line_tokens[2], 10) {
+                Ok(x) => x,
+                Err(..) => halt_compilation(
+                    "[E004] Failed to parse value: Only integer values are allowed",
+                    line,
+                ),
+            };
+        }
+
+        memory_map.insert(
+            line_tokens[1].to_string(),
+            (ir_size_bytes + memory_offset, value, size),
+        );
+        memory_offset += size
+    }
+
+    // Pass 11
+    // Final cleanup of variable reference sets
+    source_code.retain(|line| !line.is_empty() && !line.starts_with("set"));
+
+    // Pass 12
     // Repeatedly scan and generate tag addresses
     let mut jump_addresses: HashMap<String, usize> = HashMap::new();
     loop {
@@ -211,25 +329,21 @@ fn preprocess_source_code(
         }
     }
 
-    // Pass 8
+    // Pass 13
     // Build abstract syntax tree
     let mut abstract_syntax_tree: Vec<Operation> = Vec::new();
     for line in source_code {
         let line_tokens: Vec<String> = line.split(" ").map(|x| x.to_owned()).collect();
-        // Extract 'add' from 'add64'
-        let opcode: String = line_tokens[0]
-            .chars()
-            .filter(|x| x.is_alphabetic())
-            .collect::<String>();
-        let size: usize = usize::from_str_radix(&line_tokens[0].chars().filter(|x|{x.is_numeric()}).collect::<String>(), 10).unwrap_or_else(|_| { halt_compilation("[E003] Failed to parse size: Did you remember to specify the size of the operation?", &line)}) / 8;
+        let opcode: String = line_tokens[0].clone();
+        let size: usize = 8usize;
         let args: Vec<usize> = line_tokens[1..].iter().map(|x|{
             if x.starts_with("#") {
                 jump_addresses.get(&x[1..]).unwrap_or_else(|| { halt_compilation("[E005] Jump address resolution failed: Try checking your spelling", &line) }).clone()
-            } else if x.starts_with("$") {
-                memory_map.get(&x[1..]).unwrap_or_else(|| { halt_compilation("[E006] Memory resolution failed: Try checking your spelling", &line) }).0
             } else {
-                halt_compilation("[E007] Invalid argument to function: Only variables and tags are allowed as arguments", &line);
-            }
+                memory_map.get(x).unwrap_or_else(|| { halt_compilation("[E006] Memory resolution failed: Try checking your spelling", &line) }).0
+            } // else {
+            // halt_compilation("[E007] Invalid argument to function: Only variables and tags are allowed as arguments", &line);
+            // }
         }).collect();
         abstract_syntax_tree.push(match &opcode[..] {
             "mov" => {

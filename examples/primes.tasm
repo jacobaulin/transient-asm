@@ -3,24 +3,26 @@ set64 $current_num 1
 set64 $divisor 2
 set64 $remainder 0
 set64 $is_done_checking 0
-set64 $one 1
-set64 $two 2
 
 set64 $newline 10
+
 
 #outer_loop
 // Main infinite loop
 
-add64 $current_num $two $current_num
+add64 $current_num !64_1 $current_num
 mov64 $current_num $divisor
-divt64 $divisor $two $divisor
+divt64 $divisor !64_2 $divisor
+putc8 !8_70
+putc8 !8_10
+sub64 #outer_loop !64_1 #outer_loop
 
 #inner_loop
 rem64 $current_num $divisor $remainder
 jne64 #outer_loop $remainder
-equ64 $divisor $two $is_done_checking
+equ64 $divisor !64_2 $is_done_checking
 jie64 #division_done $is_done_checking
-sub64 $divisor $one $divisor
+sub64 $divisor !64_1 $divisor
 jmp64 #inner_loop
 
 // Stop inner loop
