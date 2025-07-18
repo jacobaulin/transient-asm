@@ -363,9 +363,12 @@ fn preprocess_source_code(
             // halt_compilation("[E007] Invalid argument to function: Only variables and tags are allowed as arguments", &line);
             // }
         }).collect();
+        let mut ptrs: Vec<usize> = Vec::new();
         for i in 1..line_tokens.len() {
             if line_tokens[i].starts_with(">") {
-                ptr_mode |= 2usize.pow((i-1) as u32);
+                ptrs.push(1);
+            } else {
+                ptrs.push(0);
             }
         }
         abstract_syntax_tree.push(match &opcode[..] {
@@ -373,114 +376,133 @@ fn preprocess_source_code(
                 if args.len() != 2 {
                     halt_compilation("[E008] This function takes 2 arguments", &line);
                 }
+                let ptr_mode = ptrs[0] * 1 | ptrs[1] * 4;
                 Operation::Mov(ptr_mode, args[0], args[1])
             }
             "add" => {
                 if args.len() != 3 {
                     halt_compilation("[E008] This function takes 3 arguments", &line);
                 }
+                let ptr_mode = ptrs[0] * 1 | ptrs[1] * 2 | ptrs[2] * 4;
                 Operation::Add(ptr_mode, args[0], args[1], args[2])
             }
             "sub" => {
                 if args.len() != 3 {
                     halt_compilation("[E008] This function takes 3 arguments", &line);
                 }
+                let ptr_mode = ptrs[0] * 1 | ptrs[1] * 2 | ptrs[2] * 4;
                 Operation::Sub(ptr_mode, args[0], args[1], args[2])
             }
             "mul" => {
                 if args.len() != 3 {
                     halt_compilation("[E008] This function takes 3 arguments", &line);
                 }
+                let ptr_mode = ptrs[0] * 1 | ptrs[1] * 2 | ptrs[2] * 4;
                 Operation::Mul(ptr_mode, args[0], args[1], args[2])
             }
             "divt" => {
                 if args.len() != 3 {
                     halt_compilation("[E008] This function takes 3 arguments", &line);
                 }
+                let ptr_mode = ptrs[0] * 1 | ptrs[1] * 2 | ptrs[2] * 4;
                 Operation::DivT(ptr_mode, args[0], args[1], args[2])
             }
             "divr" => {
                 if args.len() != 3 {
                     halt_compilation("[E008] This function takes 3 arguments", &line);
                 }
+                let ptr_mode = ptrs[0] * 1 | ptrs[1] * 2 | ptrs[2] * 4;
                 Operation::DivR(ptr_mode, args[0], args[1], args[2])
             }
             "rem" => {
                 if args.len() != 3 {
                     halt_compilation("[E008] This function takes 3 arguments", &line);
                 }
+                let ptr_mode = ptrs[0] * 1 | ptrs[1] * 2 | ptrs[2] * 4;
                 Operation::Rem(ptr_mode, args[0], args[1], args[2])
             }
             "cgt" => {
                 if args.len() != 3 {
                     halt_compilation("[E008] This function takes 3 arguments", &line);
                 }
+                let ptr_mode = ptrs[0] * 1 | ptrs[1] * 2 | ptrs[2] * 4;
                 Operation::Cgt(ptr_mode, args[0], args[1], args[2])
             }
             "clt" => {
                 if args.len() != 3 {
                     halt_compilation("[E008] This function takes 3 arguments", &line);
                 }
+                let ptr_mode = ptrs[0] * 1 | ptrs[1] * 2 | ptrs[2] * 4;
                 Operation::Clt(ptr_mode, args[0], args[1], args[2])
             }
             "jmp" => {
                 if args.len() != 1 {
                     halt_compilation("[E008] This function takes 1 argument", &line);
                 }
+                let ptr_mode = ptrs[0] * 1;
                 Operation::Jmp(args[0])
             }
             "jie" => {
                 if args.len() != 2 {
                     halt_compilation("[E008] This function takes 2 arguments", &line);
                 }
+                let ptr_mode = ptrs[0] * 1 | ptrs[1] * 2;
                 Operation::Jie(ptr_mode, args[0], args[1])
             }
             "jne" => {
                 if args.len() != 2 {
                     halt_compilation("[E008] This function takes 2 arguments", &line);
                 }
+                let ptr_mode = ptrs[0] * 1 | ptrs[1] * 2;
                 Operation::Jne(ptr_mode, args[0], args[1])
             }
             "puti" => {
                 if args.len() != 1 {
                     halt_compilation("[E008] This function takes 1 argument", &line);
                 }
+                let ptr_mode = ptrs[0] * 1;
                 Operation::PutI(ptr_mode, args[0])
             }
             "putc" => {
                 if args.len() != 1 {
                     halt_compilation("[E008] This function takes 1 argument", &line);
                 }
+                let ptr_mode = ptrs[0] * 1;
                 Operation::PutC(ptr_mode, args[0])
             }
             "imz" => {
                 if args.len() != 1 {
                     halt_compilation("[E008] This function takes 1 argument", &line);
                 }
+                let ptr_mode = ptrs[0] * 4;
                 Operation::Imz(ptr_mode, args[0])
             }
             "equ" => {
                 if args.len() != 3 {
                     halt_compilation("[E008] This function takes 3 argument", &line);
                 }
+                let ptr_mode = ptrs[0] * 1 | ptrs[1] * 2 | ptrs[2] * 4;
                 Operation::Equ(ptr_mode, args[0], args[1], args[2])
             }
             "cal" => {
                 if args.len() != 1 {
                     halt_compilation("[E008] This function takes 1 argument", &line);
                 }
+                let ptr_mode = ptrs[0] * 1;
                 Operation::Cal(args[0])
             }
             "cie" => {
                 if args.len() != 2 {
                     halt_compilation("[E008] This function takes 2 arguments", &line);
                 }
+                let ptr_mode = ptrs[0] * 1 | ptrs[1] * 2;
                 Operation::Cie(ptr_mode, args[0], args[1])
             }
             "cne" => {
                 if args.len() != 2 {
                     halt_compilation("[E008] This function takes 2 arguments", &line);
                 }
+                let ptr_mode = ptrs[0] * 1 | ptrs[1] * 2;
                 Operation::Cne(ptr_mode, args[0], args[1])
             }
             "ret" => Operation::Ret(),

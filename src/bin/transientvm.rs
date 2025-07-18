@@ -52,28 +52,26 @@ use std::env::args;
 use std::fs::File;
 use std::io::Read;
 
-const TRANSIENT_MEM_MAX: usize = 0xFFFF;
-
 #[derive(PartialEq)]
 pub enum TransientMode {
     RUNNING,
     HALTED,
 }
 
-pub struct TransientState<const TRANSIENT_MEM_MAX: usize> {
-    pub memory: [u8; TRANSIENT_MEM_MAX],
+pub struct TransientState {
+    pub memory: Vec<u8>,
     pub image_length: usize, // Length of executable code in memory
     pub program_counter: usize,
     pub mode: TransientMode,
     pub call_stack: Vec<usize>,
 }
 
-impl<const TRANSIENT_MEM_MAX: usize> TransientState<TRANSIENT_MEM_MAX> {
+impl TransientState {
     /// Initialize a new, empty instance of a transient processor/state with a transient memory
     /// size of TRANSIENT_MEM_MAX bytes.
     pub fn new() -> Self {
         TransientState {
-            memory: [0u8; TRANSIENT_MEM_MAX],
+            memory: vec![0; 0xFFFFFFFF],
             image_length: 0,
             program_counter: 0,
             mode: TransientMode::HALTED,
@@ -115,10 +113,9 @@ impl<const TRANSIENT_MEM_MAX: usize> TransientState<TRANSIENT_MEM_MAX> {
         if (ptr_mode == 1) {
             let fetch_stage_1 = &self.memory[address..][..8];
             let ptr_address = u64::from_be_bytes(u64_pad_be(&fetch_stage_1)) as usize;
-            assert!(
-                self.memory.len() > ptr_address + 8,
-                "Halt: Attempted pointer write beyond memory space"
-            );
+            if self.memory.len() < ptr_address + 8 {
+                panic!("Halt: Attempted pointer write beyond memory space! Pointer at {} attempted to write at {}.\n-> Program Counter: {}, Transient Memory:\n{:?}", address, ptr_address, self.program_counter, self.memory);
+            }
             self.memory[ptr_address..][..8].copy_from_slice(&data[data.len() - 8..][..8]);
             return;
         }
@@ -132,10 +129,9 @@ impl<const TRANSIENT_MEM_MAX: usize> TransientState<TRANSIENT_MEM_MAX> {
         let fetch_stage_1 = &self.memory[address..][..8];
         if ptr_mode == 1 {
             let ptr_address = u64::from_be_bytes(u64_pad_be(&fetch_stage_1)) as usize;
-            assert!(
-                self.memory.len() > ptr_address + 8,
-                "Halt: Attempted pointer read beyond memory space"
-            );
+            if self.memory.len() < ptr_address + 8 {
+                panic!("Halt: Attempted pointer read beyond memory space! Pointer at {} attempted to write at {}.\n-> Program Counter: {}, Transient Memory:\n{:?}", address, ptr_address, self.program_counter, self.memory);
+            }
             let fetch_stage_2 = &self.memory[ptr_address..][..8];
             return fetch_stage_2;
         }
@@ -357,7 +353,7 @@ fn main() {
     println!("Info: File read");
 
     // Initialize transient processor
-    let mut transient_state = TransientState::<TRANSIENT_MEM_MAX>::new();
+    let mut transient_state = TransientState::new();
     println!("Info: Transient processor initialized");
 
     // Copy over image at offset 0 (at the start)
