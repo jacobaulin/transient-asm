@@ -110,7 +110,7 @@ impl TransientState {
             self.memory.len() > address + 8,
             "Halt: Attempted memory write beyond memory scope"
         );
-        if (ptr_mode == 1) {
+        if ptr_mode == 1 {
             let fetch_stage_1 = &self.memory[address..][..8];
             let ptr_address = u64::from_be_bytes(u64_pad_be(&fetch_stage_1)) as usize;
             if self.memory.len() < ptr_address + 8 {

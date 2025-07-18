@@ -193,7 +193,7 @@ fn preprocess_source_code(
             );
         }
         let mut value = 0;
-        if (line_tokens.len() == 3) {
+        if line_tokens.len() == 3 {
             value = match u64::from_str_radix(&line_tokens[2], 10) {
                 Ok(x) => x,
                 Err(..) => halt_compilation(
@@ -259,7 +259,7 @@ fn preprocess_source_code(
             if intermediates.get(&hash).is_some() {
                 continue;
             }
-            intermediates.insert(hash, (value));
+            intermediates.insert(hash, value);
         }
     }
     // Pass 9
@@ -303,7 +303,7 @@ fn preprocess_source_code(
             );
         }
         let mut value = 0;
-        if (line_tokens.len() == 3) {
+        if line_tokens.len() == 3 {
             value = match u64::from_str_radix(&line_tokens[2], 10) {
                 Ok(x) => x,
                 Err(..) => halt_compilation(
@@ -351,7 +351,6 @@ fn preprocess_source_code(
     for line in &source_code {
         let line_tokens: Vec<String> = line.split(" ").map(|x| x.to_owned()).collect();
         let opcode: String = line_tokens[0].clone();
-        let mut ptr_mode: usize = 0usize;
         let args: Vec<usize> = line_tokens[1..].iter().map(|x|{
             if x.starts_with("#") {
                 jump_addresses.get(&x[1..]).unwrap_or_else(|| { halt_compilation("[E005] Jump address resolution failed: Try checking your spelling", &line) }).clone()
@@ -439,7 +438,6 @@ fn preprocess_source_code(
                 if args.len() != 1 {
                     halt_compilation("[E008] This function takes 1 argument", &line);
                 }
-                let ptr_mode = ptrs[0] * 1;
                 Operation::Jmp(args[0])
             }
             "jie" => {
@@ -488,7 +486,6 @@ fn preprocess_source_code(
                 if args.len() != 1 {
                     halt_compilation("[E008] This function takes 1 argument", &line);
                 }
-                let ptr_mode = ptrs[0] * 1;
                 Operation::Cal(args[0])
             }
             "cie" => {
