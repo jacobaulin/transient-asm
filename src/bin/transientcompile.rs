@@ -18,6 +18,10 @@
 0x0E: PUT prints data at source1 to the screen (char)
 0x0F: IMZ gets the image size that was loaded to ROM and stores it in destination
 0x10: EQU compare if source1 and source2 are equal, and if so, store 1 in destination
+0x11: CAL stops current execution and jumps to code in source1, saving the program counter
+0x12: CIE stops current execution and jumps to code in source1, saving the program counter, ONLY IF source2 is non-zero
+0x13: CNE stops current execution and jumps to code in source1, saving the program counter, ONLY IF source2 is zero
+0x14: RET restores the saved program counter
 0xFF: HLT halts execution and stops processor
 */
 
@@ -46,6 +50,10 @@ enum Operation {
     PutC(usize, usize),
     Imz(usize, usize),
     Equ(usize, usize, usize, usize),
+    Cal(usize),
+    Cie(usize, usize, usize),
+    Cne(usize, usize, usize),
+    Ret(),
     Hlt(),
 }
 
@@ -67,6 +75,10 @@ fn resolve_operation_opcode(operation: &Operation) -> u8 {
         Operation::PutC(..) => 0x0E,
         Operation::Imz(..) => 0x0F,
         Operation::Equ(..) => 0x10,
+        Operation::Cal(..) => 0x11,
+        Operation::Cie(..) => 0x12,
+        Operation::Cne(..) => 0x13,
+        Operation::Ret(..) => 0x14,
         Operation::Hlt(..) => 0xFF,
     }
 }
@@ -133,7 +145,10 @@ fn preprocess_source_code(
             if line.len() >= 3 && &line[..3] == "set" {
                 continue;
             }
-            *line = line.replace(&format!(" {value}"), &format!(" __internal_{hash}"));
+            *line = line.replace(&format!(" {value} "), &format!(" __internal_{hash} "));
+            if line.ends_with(&format!(" {value}")) {
+                *line = line.strip_suffix(&format!(" {value}")).unwrap().to_owned() + &format!(" __internal_{hash}");
+            }
         }
         source_code.insert(0, format!("set __internal_{hash} {value}"));
     }
@@ -209,7 +224,7 @@ fn preprocess_source_code(
                 continue;
             }
             // let (address, value, size) = memory_map[token[1..]];
-            let address = memory_map.get(&token[1..].to_owned()).unwrap_or_else(|| { halt_compilation("[E006] Memory resolution failed: Try checking your spelling", &line) }).0;
+            let address = memory_map.get(&token[1..].to_owned()).unwrap_or_else(|| { halt_compilation("[E002] Memory resolution failed: Try checking your spelling", &line) }).0;
 
             address_references.insert(token[1..].to_owned(), address);
             // *token = address.to_string().as_str();
@@ -254,7 +269,11 @@ fn preprocess_source_code(
             if line.len() >= 3 && &line[..3] == "set" {
                 continue;
             }
-            *line = line.replace(&format!(" {value}"), &format!(" __internal_{hash}"));
+            *line = line.replace(&format!(" {value} "), &format!(" __internal_{hash} "));
+            if line.ends_with(&format!(" {value}")) {
+                *line = line.strip_suffix(&format!(" {value}")).unwrap().to_owned() + &format!(" __internal_{hash}");
+            }
+            // *line = line.replace(&format!(" {value}"), &format!(" __internal_{hash}"));
         }
         source_code.insert(0, format!("set __internal_{hash} {value}"));
     }
@@ -276,6 +295,8 @@ fn preprocess_source_code(
         }
         // Check if variable exists
         if memory_map.get(&line_tokens[1]).is_some() {
+                dbg!(&source_code);
+                dbg!(&memory_map);
             halt_compilation(
                 "[E010] Variable memory collision: Did you initialize the same variable twice?",
                 &line,
@@ -327,7 +348,7 @@ fn preprocess_source_code(
     // Pass 13
     // Build abstract syntax tree
     let mut abstract_syntax_tree: Vec<Operation> = Vec::new();
-    for line in source_code {
+    for line in &source_code {
         let line_tokens: Vec<String> = line.split(" ").map(|x| x.to_owned()).collect();
         let opcode: String = line_tokens[0].clone();
         let mut ptr_mode: usize = 0usize;
@@ -337,7 +358,7 @@ fn preprocess_source_code(
             } else if x.starts_with(">") {
                 memory_map.get(&x[1..]).unwrap_or_else(|| { halt_compilation("[E006] Memory resolution failed: Try checking your spelling", &line) }).0
             } else {
-                memory_map.get(x).unwrap_or_else(|| { halt_compilation("[E006] Memory resolution failed: Try checking your spelling", &line) }).0
+                memory_map.get(x).unwrap_or_else(|| { halt_compilation("[E003] Memory resolution failed: Try checking your spelling", &line) }).0
             } // else {
             // halt_compilation("[E007] Invalid argument to function: Only variables and tags are allowed as arguments", &line);
             // }
@@ -444,6 +465,25 @@ fn preprocess_source_code(
                 }
                 Operation::Equ(ptr_mode, args[0], args[1], args[2])
             }
+            "cal" => {
+                if args.len() != 1 {
+                    halt_compilation("[E008] This function takes 1 argument", &line);
+                }
+                Operation::Cal(args[0])
+            }
+            "cie" => {
+                if args.len() != 2 {
+                    halt_compilation("[E008] This function takes 2 arguments", &line);
+                }
+                Operation::Cie(ptr_mode, args[0], args[1])
+            }
+            "cne" => {
+                if args.len() != 2 {
+                    halt_compilation("[E008] This function takes 2 arguments", &line);
+                }
+                Operation::Cne(ptr_mode, args[0], args[1])
+            }
+            "ret" => Operation::Ret(),
             "hlt" => Operation::Hlt(),
             _ => {
                 halt_compilation("[E009] Invalid opcode. Check your spelling", &line);
@@ -456,14 +496,14 @@ fn preprocess_source_code(
 
 fn gen_binary_instruction(
     opcode: u8,
-    size: usize,
+    ptr_mode: usize,
     src1: usize,
     src2: usize,
     dest: usize,
 ) -> [u8; 8] {
     [
         opcode,
-        size as u8,
+        ptr_mode as u8,
         (src1 as u16).to_be_bytes()[0],
         (src1 as u16).to_be_bytes()[1],
         (src2 as u16).to_be_bytes()[0],
@@ -530,6 +570,18 @@ fn codegen(
             }
             Operation::Equ(ptr_mode, src1, src2, dest) => {
                 image.extend_from_slice(&gen_binary_instruction(opcode, ptr_mode, src1, src2, dest));
+            }
+            Operation::Cal(src1) => {
+                image.extend_from_slice(&gen_binary_instruction(opcode, 0x00, src1, 0x00, 0x00));
+            }
+            Operation::Cie(ptr_mode, src1, src2) => {
+                image.extend_from_slice(&gen_binary_instruction(opcode, ptr_mode, src1, src2, 0x00));
+            }
+            Operation::Cne(ptr_mode, src1, src2) => {
+                image.extend_from_slice(&gen_binary_instruction(opcode, ptr_mode, src1, src2, 0x00));
+            }
+            Operation::Ret() => {
+                image.extend_from_slice(&gen_binary_instruction(opcode, 0x00, 0x00, 0x00, 0x00));
             }
             Operation::Hlt() => {
                 image.extend_from_slice(&gen_binary_instruction(opcode, 0x00, 0x00, 0x00, 0x00));

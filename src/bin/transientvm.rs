@@ -42,6 +42,10 @@ const PUT_I: u8 = 0x0D;
 const PUT_C: u8 = 0x0E;
 const IMZ: u8 = 0x0F;
 const EQU: u8 = 0x10;
+const CAL: u8 = 0x11;
+const CIE: u8 = 0x12;
+const CNE: u8 = 0x13;
+const RET: u8 = 0x14;
 const HLT: u8 = 0xFF;
 
 use std::env::args;
@@ -61,6 +65,7 @@ pub struct TransientState<const TRANSIENT_MEM_MAX: usize> {
     pub image_length: usize, // Length of executable code in memory
     pub program_counter: usize,
     pub mode: TransientMode,
+    pub call_stack: Vec<usize>,
 }
 
 impl<const TRANSIENT_MEM_MAX: usize> TransientState<TRANSIENT_MEM_MAX> {
@@ -72,6 +77,7 @@ impl<const TRANSIENT_MEM_MAX: usize> TransientState<TRANSIENT_MEM_MAX> {
             image_length: 0,
             program_counter: 0,
             mode: TransientMode::HALTED,
+            call_stack: Vec::new(),
         }
     }
     /// Loads a transient memory image into a state/processor at a specified offset.
@@ -279,6 +285,34 @@ impl<const TRANSIENT_MEM_MAX: usize> TransientState<TRANSIENT_MEM_MAX> {
                     dest_ptr,
                 );
                 self.program_counter + 8
+            }
+            #[rustfmt::skip]
+            CAL => {
+                self.call_stack.push(self.program_counter + 8);
+                source1_address
+            },
+            CIE => {
+                if source2_data == 0 {
+                    // Zero
+                    self.program_counter + 8
+                } else {
+                    // Nonzero
+                    self.call_stack.push(self.program_counter + 8);
+                    source1_address
+                }
+            }
+            CNE => {
+                if source2_data == 0 {
+                    // Zero
+                    source1_address
+                } else {
+                    // Nonzero
+                    self.call_stack.push(self.program_counter + 8);
+                    self.program_counter + 8
+                }
+            }
+            RET => {
+                self.call_stack.pop().expect("Halt: Attempt to return from empty call stack")
             }
             HLT => {
                 self.mode = TransientMode::HALTED;
