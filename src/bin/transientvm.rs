@@ -100,45 +100,62 @@ impl<const TRANSIENT_MEM_MAX: usize> TransientState<TRANSIENT_MEM_MAX> {
         );
         self.memory[base..][..8].try_into().unwrap()
     }
-    pub fn memory_write(&mut self, address: usize, data: &[u8], size: usize) {
+    /// If ptr_mode is 1, a redirected write will execute through the address at the given address
+    pub fn memory_write(&mut self, address: usize, data: &[u8], ptr_mode: usize) {
         assert!(
-            self.memory.len() > address + size,
+            self.memory.len() > address + 8,
             "Halt: Attempted memory write beyond memory scope"
         );
-        self.memory[address..][..size].copy_from_slice(&data[data.len() - size..][..size]);
+        if (ptr_mode == 1) {
+            let fetch_stage_1 = &self.memory[address..][..8];
+            let ptr_address = u64::from_be_bytes(u64_pad_be(&fetch_stage_1)) as usize;
+            assert!(
+                self.memory.len() > ptr_address + 8,
+                "Halt: Attempted pointer write beyond memory space"
+            );
+            self.memory[ptr_address..][..8].copy_from_slice(&data[data.len() - 8..][..8]);
+            return;
+        }
+        self.memory[address..][..8].copy_from_slice(&data[data.len() - 8..][..8]);
+    }
+    pub fn memory_read(&mut self, address: usize, ptr_mode: usize) -> &[u8] {
+        assert!(
+            self.memory.len() > address + 8,
+            "Halt: Attempted memory read beyond memory space"
+        );
+        let fetch_stage_1 = &self.memory[address..][..8];
+        if ptr_mode == 1 {
+            let ptr_address = u64::from_be_bytes(u64_pad_be(&fetch_stage_1)) as usize;
+            assert!(
+                self.memory.len() > ptr_address + 8,
+                "Halt: Attempted pointer read beyond memory space"
+            );
+            let fetch_stage_2 = &self.memory[ptr_address..][..8];
+            return fetch_stage_2;
+        }
+        &fetch_stage_1
     }
     /// Executes an instruction and returns the next program counter
     pub fn execute_instruction(&mut self, instruction: [u8; 8]) -> usize {
         // Decodes instruction
         let opcode = instruction[0];
-        let size = instruction[1] as usize;
+        let ptr_mode = instruction[1] as usize;
+        let src1_ptr = (ptr_mode & 1) / 1;
+        let src2_ptr = (ptr_mode & 2) / 2;
+        let dest_ptr = (ptr_mode & 4) / 4;
         let source1_address = u16::from_be_bytes([instruction[2], instruction[3]]) as usize;
         let source2_address = u16::from_be_bytes([instruction[4], instruction[5]]) as usize;
         let destination_address = u16::from_be_bytes([instruction[6], instruction[7]]) as usize;
 
-        // Validates memory pointers
-        assert!(
-            self.memory.len() > source1_address,
-            "Halt: Attempt to access memory beyond memory space (source1)"
-        );
-        assert!(
-            self.memory.len() > source2_address,
-            "Halt: Attempt to access memory beyond memory space (source2)"
-        );
-        assert!(
-            self.memory.len() > destination_address,
-            "Halt: Attempt to access memory beyond memory space (destination)"
-        );
-
-        let source1_data: &[u8] = &self.memory[source1_address..][..size];
+        let source1_data: &[u8] = self.memory_read(source1_address, src1_ptr);
         let source1_data: u64 = u64::from_be_bytes(u64_pad_be(source1_data));
 
-        let source2_data: &[u8] = &self.memory[source2_address..][..size];
+        let source2_data: &[u8] = self.memory_read(source2_address, src2_ptr);
         let source2_data: u64 = u64::from_be_bytes(u64_pad_be(source2_data));
 
         match opcode {
             MOV => {
-                self.memory_write(destination_address, &source1_data.to_be_bytes(), size);
+                self.memory_write(destination_address, &source1_data.to_be_bytes(), dest_ptr);
                 self.program_counter + 8
             }
             ADD => {
@@ -147,8 +164,8 @@ impl<const TRANSIENT_MEM_MAX: usize> TransientState<TRANSIENT_MEM_MAX> {
                     &(source1_data
                         .checked_add(source2_data)
                         .expect("Halt: Arithmetic overflow"))
-                    .to_be_bytes(),
-                    size,
+                        .to_be_bytes(),
+                    dest_ptr,
                 );
                 self.program_counter + 8
             }
@@ -158,8 +175,8 @@ impl<const TRANSIENT_MEM_MAX: usize> TransientState<TRANSIENT_MEM_MAX> {
                     &(source1_data
                         .checked_sub(source2_data)
                         .expect("Halt: Arithmetic overflow"))
-                    .to_be_bytes(),
-                    size,
+                        .to_be_bytes(),
+                    dest_ptr,
                 );
                 self.program_counter + 8
             }
@@ -169,8 +186,8 @@ impl<const TRANSIENT_MEM_MAX: usize> TransientState<TRANSIENT_MEM_MAX> {
                     &(source1_data
                         .checked_mul(source2_data)
                         .expect("Halt: Arithmetic overflow"))
-                    .to_be_bytes(),
-                    size,
+                        .to_be_bytes(),
+                    dest_ptr,
                 );
                 self.program_counter + 8
             }
@@ -180,8 +197,8 @@ impl<const TRANSIENT_MEM_MAX: usize> TransientState<TRANSIENT_MEM_MAX> {
                     &(source1_data
                         .checked_div(source2_data)
                         .expect("Halt: Arithmetic overflow"))
-                    .to_be_bytes(),
-                    size,
+                        .to_be_bytes(),
+                    dest_ptr,
                 );
                 self.program_counter + 8
             }
@@ -189,7 +206,7 @@ impl<const TRANSIENT_MEM_MAX: usize> TransientState<TRANSIENT_MEM_MAX> {
                 self.memory_write(
                     destination_address,
                     &((source1_data as f64 / source2_data as f64) as u64).to_be_bytes(),
-                    size,
+                    dest_ptr,
                 );
                 self.program_counter + 8
             }
@@ -197,7 +214,7 @@ impl<const TRANSIENT_MEM_MAX: usize> TransientState<TRANSIENT_MEM_MAX> {
                 self.memory_write(
                     destination_address,
                     &(source1_data % source2_data).to_be_bytes(),
-                    size,
+                    dest_ptr,
                 );
                 self.program_counter + 8
             }
@@ -205,7 +222,7 @@ impl<const TRANSIENT_MEM_MAX: usize> TransientState<TRANSIENT_MEM_MAX> {
                 self.memory_write(
                     destination_address,
                     &((source1_data > source2_data) as u64).to_be_bytes(),
-                    size,
+                    dest_ptr,
                 );
                 self.program_counter + 8
             }
@@ -213,7 +230,7 @@ impl<const TRANSIENT_MEM_MAX: usize> TransientState<TRANSIENT_MEM_MAX> {
                 self.memory_write(
                     destination_address,
                     &((source1_data < source2_data) as u64).to_be_bytes(),
-                    size,
+                    dest_ptr,
                 );
                 self.program_counter + 8
             }
@@ -251,7 +268,7 @@ impl<const TRANSIENT_MEM_MAX: usize> TransientState<TRANSIENT_MEM_MAX> {
                 self.memory_write(
                     destination_address,
                     &(self.image_length as u64).to_be_bytes(),
-                    size,
+                    dest_ptr,
                 );
                 self.program_counter + 8
             }
@@ -259,7 +276,7 @@ impl<const TRANSIENT_MEM_MAX: usize> TransientState<TRANSIENT_MEM_MAX> {
                 self.memory_write(
                     destination_address,
                     &((source1_data == source2_data) as u64).to_be_bytes(),
-                    size,
+                    dest_ptr,
                 );
                 self.program_counter + 8
             }

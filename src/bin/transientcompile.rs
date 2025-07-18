@@ -73,7 +73,7 @@ fn resolve_operation_opcode(operation: &Operation) -> u8 {
 
 fn preprocess_source_code(
     source_code: Vec<String>,
-) -> (Vec<Operation>, HashMap<String, (usize, u64, usize)>) {
+) -> (Vec<Operation>, HashMap<String, (usize, u64)>) {
     let mut source_code = source_code;
 
     // Pass 1
@@ -101,7 +101,7 @@ fn preprocess_source_code(
 
     // Pass 2
     // Calculate all intermediates
-    let mut intermediates: HashMap<u64, (usize, usize)> = HashMap::new();
+    let mut intermediates: HashMap<u64, usize> = HashMap::new();
     for line in source_code.iter() {
         let line_tokens: Vec<String> = line.split(" ").map(|x| x.to_owned()).collect();
         if line.starts_with("set") {
@@ -111,7 +111,6 @@ fn preprocess_source_code(
             if !token.parse::<usize>().is_ok() {
                 continue;
             }
-            let size = 64;
             let value = token.parse::<usize>().unwrap_or_else(|_| {
                 halt_compilation(
                     "[E012] Failed to parse intermediate value: Only integers are allowed",
@@ -124,17 +123,17 @@ fn preprocess_source_code(
             if intermediates.get(&hash).is_some() {
                 continue;
             }
-            intermediates.insert(hash, (value, size));
+            intermediates.insert(hash, value);
         }
     }
     // Pass 3
     // Insert new intermediate variable declarations
-    for (hash, (value, size)) in intermediates.iter() {
+    for (hash, value) in intermediates.iter() {
         for line in source_code.iter_mut() {
             if line.len() >= 3 && &line[..3] == "set" {
                 continue;
             }
-            *line = line.replace(&format!("{value}"), &format!("__internal_{hash}"));
+            *line = line.replace(&format!(" {value}"), &format!(" __internal_{hash}"));
         }
         source_code.insert(0, format!("set __internal_{hash} {value}"));
     }
@@ -156,8 +155,7 @@ fn preprocess_source_code(
 
     // Pass 5
     // Build hashmap of variables to memory
-    let mut memory_map: HashMap<String, (usize, u64, usize)> = HashMap::new(); // Address, value,
-    // size
+    let mut memory_map: HashMap<String, (usize, u64)> = HashMap::new(); // Address, value
     let mut memory_offset = 0usize;
     for line in &source_code {
         // Skip if not declaration
@@ -179,7 +177,6 @@ fn preprocess_source_code(
                 &line,
             );
         }
-        let size = 8usize;
         let mut value = 0;
         if (line_tokens.len() == 3) {
             value = match u64::from_str_radix(&line_tokens[2], 10) {
@@ -193,9 +190,9 @@ fn preprocess_source_code(
 
         memory_map.insert(
             line_tokens[1].to_string(),
-            (ir_size_bytes + memory_offset, value, size),
+            (ir_size_bytes + memory_offset, value),
         );
-        memory_offset += size
+        memory_offset += 8
     }
 
     // Pass 6
@@ -225,7 +222,7 @@ fn preprocess_source_code(
 
     // Pass 8
     // Recalculate new pointer-based intermediates
-    let mut intermediates: HashMap<u64, (usize, usize)> = HashMap::new();
+    let mut intermediates: HashMap<u64, usize> = HashMap::new();
     for line in source_code.iter() {
         let line_tokens: Vec<String> = line.split(" ").map(|x| x.to_owned()).collect();
         if line.starts_with("set") {
@@ -235,7 +232,6 @@ fn preprocess_source_code(
             if !token.parse::<usize>().is_ok() {
                 continue;
             }
-            let size = 64;
             let value = token.parse::<usize>().unwrap_or_else(|_| {
                 halt_compilation(
                     "[E012] Failed to parse intermediate value: Only integers are allowed",
@@ -248,17 +244,17 @@ fn preprocess_source_code(
             if intermediates.get(&hash).is_some() {
                 continue;
             }
-            intermediates.insert(hash, (value, size));
+            intermediates.insert(hash, (value));
         }
     }
     // Pass 9
     // Insert new poiner-based intermediate variable declarations
-    for (hash, (value, size)) in intermediates.iter() {
+    for (hash, value) in intermediates.iter() {
         for line in source_code.iter_mut() {
             if line.len() >= 3 && &line[..3] == "set" {
                 continue;
             }
-            *line = line.replace(&format!("{value}"), &format!("__internal_{hash}"));
+            *line = line.replace(&format!(" {value}"), &format!(" __internal_{hash}"));
         }
         source_code.insert(0, format!("set __internal_{hash} {value}"));
     }
@@ -285,7 +281,6 @@ fn preprocess_source_code(
                 &line,
             );
         }
-        let size = 8usize;
         let mut value = 0;
         if (line_tokens.len() == 3) {
             value = match u64::from_str_radix(&line_tokens[2], 10) {
@@ -299,9 +294,9 @@ fn preprocess_source_code(
 
         memory_map.insert(
             line_tokens[1].to_string(),
-            (ir_size_bytes + memory_offset, value, size),
+            (ir_size_bytes + memory_offset, value),
         );
-        memory_offset += size
+        memory_offset += 8
     }
 
     // Pass 11
@@ -335,70 +330,77 @@ fn preprocess_source_code(
     for line in source_code {
         let line_tokens: Vec<String> = line.split(" ").map(|x| x.to_owned()).collect();
         let opcode: String = line_tokens[0].clone();
-        let size: usize = 8usize;
+        let mut ptr_mode: usize = 0usize;
         let args: Vec<usize> = line_tokens[1..].iter().map(|x|{
             if x.starts_with("#") {
                 jump_addresses.get(&x[1..]).unwrap_or_else(|| { halt_compilation("[E005] Jump address resolution failed: Try checking your spelling", &line) }).clone()
+            } else if x.starts_with(">") {
+                memory_map.get(&x[1..]).unwrap_or_else(|| { halt_compilation("[E006] Memory resolution failed: Try checking your spelling", &line) }).0
             } else {
                 memory_map.get(x).unwrap_or_else(|| { halt_compilation("[E006] Memory resolution failed: Try checking your spelling", &line) }).0
             } // else {
             // halt_compilation("[E007] Invalid argument to function: Only variables and tags are allowed as arguments", &line);
             // }
         }).collect();
+        for i in 1..line_tokens.len() {
+            if line_tokens[i].starts_with(">") {
+                ptr_mode |= 2usize.pow((i-1) as u32);
+            }
+        }
         abstract_syntax_tree.push(match &opcode[..] {
             "mov" => {
                 if args.len() != 2 {
                     halt_compilation("[E008] This function takes 2 arguments", &line);
                 }
-                Operation::Mov(size, args[0], args[1])
+                Operation::Mov(ptr_mode, args[0], args[1])
             }
             "add" => {
                 if args.len() != 3 {
                     halt_compilation("[E008] This function takes 3 arguments", &line);
                 }
-                Operation::Add(size, args[0], args[1], args[2])
+                Operation::Add(ptr_mode, args[0], args[1], args[2])
             }
             "sub" => {
                 if args.len() != 3 {
                     halt_compilation("[E008] This function takes 3 arguments", &line);
                 }
-                Operation::Sub(size, args[0], args[1], args[2])
+                Operation::Sub(ptr_mode, args[0], args[1], args[2])
             }
             "mul" => {
                 if args.len() != 3 {
                     halt_compilation("[E008] This function takes 3 arguments", &line);
                 }
-                Operation::Mul(size, args[0], args[1], args[2])
+                Operation::Mul(ptr_mode, args[0], args[1], args[2])
             }
             "divt" => {
                 if args.len() != 3 {
                     halt_compilation("[E008] This function takes 3 arguments", &line);
                 }
-                Operation::DivT(size, args[0], args[1], args[2])
+                Operation::DivT(ptr_mode, args[0], args[1], args[2])
             }
             "divr" => {
                 if args.len() != 3 {
                     halt_compilation("[E008] This function takes 3 arguments", &line);
                 }
-                Operation::DivR(size, args[0], args[1], args[2])
+                Operation::DivR(ptr_mode, args[0], args[1], args[2])
             }
             "rem" => {
                 if args.len() != 3 {
                     halt_compilation("[E008] This function takes 3 arguments", &line);
                 }
-                Operation::Rem(size, args[0], args[1], args[2])
+                Operation::Rem(ptr_mode, args[0], args[1], args[2])
             }
             "cgt" => {
                 if args.len() != 3 {
                     halt_compilation("[E008] This function takes 3 arguments", &line);
                 }
-                Operation::Cgt(size, args[0], args[1], args[2])
+                Operation::Cgt(ptr_mode, args[0], args[1], args[2])
             }
             "clt" => {
                 if args.len() != 3 {
                     halt_compilation("[E008] This function takes 3 arguments", &line);
                 }
-                Operation::Clt(size, args[0], args[1], args[2])
+                Operation::Clt(ptr_mode, args[0], args[1], args[2])
             }
             "jmp" => {
                 if args.len() != 1 {
@@ -410,37 +412,37 @@ fn preprocess_source_code(
                 if args.len() != 2 {
                     halt_compilation("[E008] This function takes 2 arguments", &line);
                 }
-                Operation::Jie(size, args[0], args[1])
+                Operation::Jie(ptr_mode, args[0], args[1])
             }
             "jne" => {
                 if args.len() != 2 {
                     halt_compilation("[E008] This function takes 2 arguments", &line);
                 }
-                Operation::Jne(size, args[0], args[1])
+                Operation::Jne(ptr_mode, args[0], args[1])
             }
             "puti" => {
                 if args.len() != 1 {
                     halt_compilation("[E008] This function takes 1 argument", &line);
                 }
-                Operation::PutI(size, args[0])
+                Operation::PutI(ptr_mode, args[0])
             }
             "putc" => {
                 if args.len() != 1 {
                     halt_compilation("[E008] This function takes 1 argument", &line);
                 }
-                Operation::PutC(size, args[0])
+                Operation::PutC(ptr_mode, args[0])
             }
             "imz" => {
                 if args.len() != 1 {
                     halt_compilation("[E008] This function takes 1 argument", &line);
                 }
-                Operation::Imz(size, args[0])
+                Operation::Imz(ptr_mode, args[0])
             }
             "equ" => {
                 if args.len() != 3 {
                     halt_compilation("[E008] This function takes 3 argument", &line);
                 }
-                Operation::Equ(size, args[0], args[1], args[2])
+                Operation::Equ(ptr_mode, args[0], args[1], args[2])
             }
             "hlt" => Operation::Hlt(),
             _ => {
@@ -473,7 +475,7 @@ fn gen_binary_instruction(
 
 fn codegen(
     abstract_syntax_tree: &Vec<Operation>,
-    memory_map: &HashMap<String, (usize, u64, usize)>,
+    memory_map: &HashMap<String, (usize, u64)>,
 ) -> Vec<u8> {
     let mut image: Vec<u8> = vec![];
 
@@ -481,53 +483,53 @@ fn codegen(
     for (_index, instruction) in abstract_syntax_tree.iter().enumerate() {
         let opcode = resolve_operation_opcode(&instruction);
         match *instruction {
-            Operation::Mov(size, src1, dest) => {
-                image.extend_from_slice(&gen_binary_instruction(opcode, size, src1, 0x00, dest));
+            Operation::Mov(ptr_mode, src1, dest) => {
+                image.extend_from_slice(&gen_binary_instruction(opcode, ptr_mode, src1, 0x00, dest));
             }
-            Operation::Add(size, src1, src2, dest) => {
-                image.extend_from_slice(&gen_binary_instruction(opcode, size, src1, src2, dest));
+            Operation::Add(ptr_mode, src1, src2, dest) => {
+                image.extend_from_slice(&gen_binary_instruction(opcode, ptr_mode, src1, src2, dest));
             }
-            Operation::Sub(size, src1, src2, dest) => {
-                image.extend_from_slice(&gen_binary_instruction(opcode, size, src1, src2, dest));
+            Operation::Sub(ptr_mode, src1, src2, dest) => {
+                image.extend_from_slice(&gen_binary_instruction(opcode, ptr_mode, src1, src2, dest));
             }
-            Operation::Mul(size, src1, src2, dest) => {
-                image.extend_from_slice(&gen_binary_instruction(opcode, size, src1, src2, dest));
+            Operation::Mul(ptr_mode, src1, src2, dest) => {
+                image.extend_from_slice(&gen_binary_instruction(opcode, ptr_mode, src1, src2, dest));
             }
-            Operation::DivT(size, src1, src2, dest) => {
-                image.extend_from_slice(&gen_binary_instruction(opcode, size, src1, src2, dest));
+            Operation::DivT(ptr_mode, src1, src2, dest) => {
+                image.extend_from_slice(&gen_binary_instruction(opcode, ptr_mode, src1, src2, dest));
             }
-            Operation::DivR(size, src1, src2, dest) => {
-                image.extend_from_slice(&gen_binary_instruction(opcode, size, src1, src2, dest));
+            Operation::DivR(ptr_mode, src1, src2, dest) => {
+                image.extend_from_slice(&gen_binary_instruction(opcode, ptr_mode, src1, src2, dest));
             }
-            Operation::Rem(size, src1, src2, dest) => {
-                image.extend_from_slice(&gen_binary_instruction(opcode, size, src1, src2, dest));
+            Operation::Rem(ptr_mode, src1, src2, dest) => {
+                image.extend_from_slice(&gen_binary_instruction(opcode, ptr_mode, src1, src2, dest));
             }
-            Operation::Cgt(size, src1, src2, dest) => {
-                image.extend_from_slice(&gen_binary_instruction(opcode, size, src1, src2, dest));
+            Operation::Cgt(ptr_mode, src1, src2, dest) => {
+                image.extend_from_slice(&gen_binary_instruction(opcode, ptr_mode, src1, src2, dest));
             }
-            Operation::Clt(size, src1, src2, dest) => {
-                image.extend_from_slice(&gen_binary_instruction(opcode, size, src1, src2, dest));
+            Operation::Clt(ptr_mode, src1, src2, dest) => {
+                image.extend_from_slice(&gen_binary_instruction(opcode, ptr_mode, src1, src2, dest));
             }
             Operation::Jmp(src1) => {
                 image.extend_from_slice(&gen_binary_instruction(opcode, 0x00, src1, 0x00, 0x00));
             }
-            Operation::Jie(size, src1, src2) => {
-                image.extend_from_slice(&gen_binary_instruction(opcode, size, src1, src2, 0x00));
+            Operation::Jie(ptr_mode, src1, src2) => {
+                image.extend_from_slice(&gen_binary_instruction(opcode, ptr_mode, src1, src2, 0x00));
             }
-            Operation::Jne(size, src1, src2) => {
-                image.extend_from_slice(&gen_binary_instruction(opcode, size, src1, src2, 0x00));
+            Operation::Jne(ptr_mode, src1, src2) => {
+                image.extend_from_slice(&gen_binary_instruction(opcode, ptr_mode, src1, src2, 0x00));
             }
-            Operation::PutI(size, src1) => {
-                image.extend_from_slice(&gen_binary_instruction(opcode, size, src1, 0x00, 0x00));
+            Operation::PutI(ptr_mode, src1) => {
+                image.extend_from_slice(&gen_binary_instruction(opcode, ptr_mode, src1, 0x00, 0x00));
             }
-            Operation::PutC(size, src1) => {
-                image.extend_from_slice(&gen_binary_instruction(opcode, size, src1, 0x00, 0x00));
+            Operation::PutC(ptr_mode, src1) => {
+                image.extend_from_slice(&gen_binary_instruction(opcode, ptr_mode, src1, 0x00, 0x00));
             }
-            Operation::Imz(size, dest) => {
-                image.extend_from_slice(&gen_binary_instruction(opcode, size, 0x00, 0x00, dest));
+            Operation::Imz(ptr_mode, dest) => {
+                image.extend_from_slice(&gen_binary_instruction(opcode, ptr_mode, 0x00, 0x00, dest));
             }
-            Operation::Equ(size, src1, src2, dest) => {
-                image.extend_from_slice(&gen_binary_instruction(opcode, size, src1, src2, dest));
+            Operation::Equ(ptr_mode, src1, src2, dest) => {
+                image.extend_from_slice(&gen_binary_instruction(opcode, ptr_mode, src1, src2, dest));
             }
             Operation::Hlt() => {
                 image.extend_from_slice(&gen_binary_instruction(opcode, 0x00, 0x00, 0x00, 0x00));
@@ -537,17 +539,17 @@ fn codegen(
 
     // Calculate amount of space that variables take
     let mut var_size = 0;
-    for (_address, _value, size) in memory_map.values() {
-        var_size += size;
+    for (_address, _value) in memory_map.values() {
+        var_size += 8;
     }
 
     // Allocate size for new vars
     image.resize(image.len() + var_size, 0);
 
     // Write variables to image
-    for (address, value, size) in memory_map.values() {
-        image[*address..][..*size].copy_from_slice(
-            value.to_be_bytes()[value.to_be_bytes().len() - size..]
+    for (address, value) in memory_map.values() {
+        image[*address..][..8].copy_from_slice(
+            value.to_be_bytes()[value.to_be_bytes().len() - 8..]
                 .try_into()
                 .expect("[COMPILER PANIC]: Failed to write variable to image"),
         )
@@ -572,10 +574,10 @@ fn format_ast(ast: &Vec<Operation>) -> String {
     out
 }
 
-fn format_mm(mm: &HashMap<String, (usize, u64, usize)>) -> String {
+fn format_mm(mm: &HashMap<String, (usize, u64)>) -> String {
     let mut out = String::new();
-    for (name, (address, value, size)) in mm {
-        out += &format!("[{}]: {} = {} ({}b)\n", address, name, value, size);
+    for (name, (address, value)) in mm {
+        out += &format!("[{}]: {} = {}\n", address, name, value);
     }
     out
 }
