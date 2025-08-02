@@ -1,0 +1,29 @@
+// no args, no ret
+#memory_initialize
+cal #__memory_initialize
+ret
+
+// arg1: size (x8)
+#memory_allocate
+cal #__memory_allocate
+ret
+
+
+
+#__memory_initialize
+set __memory_map_ptr
+imz __memory_map_ptr
+ret
+
+#__memory_allocate
+mov __memory_map_ptr memory_ret1
+set __memory_map_offset
+mov memory_arg1 __memory_map_offset
+mul 8 __memory_map_offset __memory_map_offset
+add __memory_map_offset __memory_map_ptr __memory_map_ptr
+ret
+
+
+
+set memory_arg1
+set memory_ret1

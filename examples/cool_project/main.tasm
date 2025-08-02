@@ -1,0 +1,59 @@
+// importera listor-biblioteket
+*lib list.tasm
+*lib memory.tasm
+
+// förbered
+cal #memory_initialize
+
+// allokera minne
+set list1_ptr
+set list1_size 20
+mov list1_size memory_arg1
+cal #memory_allocate
+mov memory_ret1 list1_ptr
+
+set list2_ptr
+set list2_size 5
+mov list2_size memory_arg1
+cal #memory_allocate
+mov memory_ret1 list2_ptr
+
+// generera listorna
+mov list1_ptr list_arg1
+mov list1_size list_arg2
+cal #list_generate
+
+mov list2_ptr list_arg1
+mov list2_size list_arg2
+cal #list_generate
+
+// dumpa listan
+mov list1_ptr list_arg1
+mov list1_size list_arg2
+cal #list_dump
+
+mov list2_ptr list_arg1
+mov list2_size list_arg2
+cal #list_dump
+
+// ändra listan
+mov list1_ptr list_arg1
+mov 3 list_arg2
+mov 40 list_arg3
+cal #list_set_index
+
+mov list2_ptr list_arg1
+mov 1 list_arg2
+mov 99 list_arg3
+cal #list_set_index
+
+// visa den igen
+mov list1_ptr list_arg1
+mov list1_size list_arg2
+cal #list_dump
+
+mov list2_ptr list_arg1
+mov list2_size list_arg2
+cal #list_dump
+
+hlt
