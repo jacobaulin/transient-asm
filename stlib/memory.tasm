@@ -1,0 +1,28 @@
+// Memory management library
+
+// Get next free space in memory
+// arg1: size (x8), ret1: memory_position
+#memory_allocate
+cal #__memory_allocate
+ret
+
+
+
+#__memory_initialize
+set __memory_map_ptr
+imz __memory_map_ptr
+ret
+
+#__memory_allocate
+cne #__memory_initialize __memory_map_ptr
+mov __memory_map_ptr memory_ret1
+set __memory_map_offset
+mov memory_arg1 __memory_map_offset
+mul 8 __memory_map_offset __memory_map_offset
+add __memory_map_offset __memory_map_ptr __memory_map_ptr
+ret
+
+
+
+set memory_arg1
+set memory_ret1

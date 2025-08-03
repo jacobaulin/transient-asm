@@ -1,8 +1,5 @@
+puti &eight
 
-set val 5
-set ptr
-mov &val ptr
-
-mov 6 >ptr
+set eight 8
 
 hlt

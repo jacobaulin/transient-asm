@@ -26,6 +26,7 @@
 */
 
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::env::args;
 use std::fs::File;
 use std::hash::{DefaultHasher, Hash, Hasher};
@@ -90,6 +91,7 @@ fn preprocess_source_code(
     
     // Pass 1
     // Include all external libraries
+    let mut included_libraries: HashSet<String> = HashSet::new();
     let mut i = 0;
     while i < source_code.len() {
         if !source_code[i].starts_with("*lib ") {
@@ -99,12 +101,16 @@ fn preprocess_source_code(
         let libname: String = source_code[i][5..].to_owned();
         let libcontent = std::fs::read_to_string(format!("{libname}")).unwrap_or_else(|_| { halt_compilation("[E011] Failed to load library, check permissions and path", &source_code[i])});
         source_code[i] = "".to_owned();
+        if included_libraries.contains(&libname) {
+            i += 1;
+            continue;
+        }
+        included_libraries.insert(libname);
         for line in libcontent.lines() {
             source_code.push(line.to_owned());
         }
         i += 1;
     }
-    dbg!(&source_code);
 
     // Pass 1
     // Remove all comments

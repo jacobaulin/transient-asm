@@ -1,0 +1,81 @@
+// arg1: base_ptr, arg2: num_elements
+#list_generate
+cal #__list_generate
+ret
+
+// arg1: base_ptr, arg2: index, ret1: data
+#list_get_index
+cal #__list_get_index
+ret
+
+// arg1: base_ptr, arg2: index, arg3: data
+#list_set_index
+cal #__list_set_index
+ret
+
+// arg1: base_ptr, arg2: num_elements
+#list_dump
+cal #__list_dump
+ret
+
+
+
+#__list_generate
+set __list_generate_i
+set __list_generate_max
+set __list_generate_res
+mov 0 __list_generate_i
+mov list_arg2 __list_generate_max
+#__list_generate_inner
+mov __list_generate_i list_arg2
+mov __list_generate_i list_arg3
+cal #__list_set_index
+add 1 __list_generate_i __list_generate_i
+cgt __list_generate_i __list_generate_max __list_generate_res
+jne #__list_generate_inner __list_generate_res
+ret
+
+#__list_get_index
+set __list_get_index_ptr
+set __list_get_index_offset
+mov list_arg2 __list_get_index_offset
+mul 8 __list_get_index_offset __list_get_index_offset
+add list_arg1 __list_get_index_offset __list_get_index_ptr
+mov >__list_get_index_ptr list_ret1
+ret
+
+#__list_set_index
+set __list_set_index_ptr
+set __list_set_index_offset
+mov list_arg2 __list_set_index_offset
+mul 8 __list_set_index_offset __list_set_index_offset
+add list_arg1 __list_set_index_offset __list_set_index_ptr
+mov list_arg3 >__list_set_index_ptr
+ret
+
+#__list_dump
+set __list_dump_i
+set __list_dump_len
+set __list_dump_res
+mov 0 __list_dump_i
+mov list_arg2 __list_dump_len
+putc 91
+#__list_dump_inner
+mov __list_dump_i list_arg2
+cal #__list_get_index
+puti list_ret1
+putc 44
+add 1 __list_dump_i __list_dump_i
+cgt __list_dump_i __list_dump_len __list_dump_res
+jne #__list_dump_inner __list_dump_res
+putc 93
+putc 10
+ret
+
+
+
+set list_arg1
+set list_arg2
+set list_arg3
+
+set list_ret1

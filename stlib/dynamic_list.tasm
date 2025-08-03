@@ -1,0 +1,26 @@
+// List management library for dynamic size lists
+
+*lib ./stlib/memory.tasm
+
+
+set dynamic_list_arg1
+set dynamic_list_arg2
+set dynamic_list_arg3
+
+set dynamic_list_ret1
+
+set __dynamic_list_base_ptr
+set __dynamic_list_lists
+set __dynamic_list_base_list_element
+
+
+#__dynamic_list_initialize
+mov 2 memory_arg1
+call #memory_allocate
+mov memory_ret1 __dynamic_list_base_ptr
+mov &__dynamic_list_base_ptr __dynamic_list_base_list_element
+add __dynamic_list_base_list_element 4 __dynamic_list_base_list_element
+ret
+
+#__dynamic_list_initialize_list
+cne #__dynamic_list_initialize __dynamic_list_base_ptr
