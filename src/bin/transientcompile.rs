@@ -104,7 +104,7 @@ fn preprocess_source_code(
         }
         i += 1;
     }
-
+    dbg!(&source_code);
 
     // Pass 1
     // Remove all comments
