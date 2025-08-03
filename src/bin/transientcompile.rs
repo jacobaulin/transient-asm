@@ -87,25 +87,24 @@ fn preprocess_source_code(
     source_code: Vec<String>,
 ) -> (Vec<Operation>, HashMap<String, (usize, u64)>) {
     let mut source_code = source_code;
-
+    
     // Pass 1
     // Include all external libraries
-    let mut libcollection: Vec<Vec<String>> = Vec::new();
-    for line in source_code.iter_mut() {
-        if !line.starts_with("*lib ") {
+    let mut i = 0;
+    while i < source_code.len() {
+        if !source_code[i].starts_with("*lib ") {
+            i += 1;
             continue;
         }
-        let libname: String = line[5..].to_owned();
-        let libcontent = std::fs::read_to_string(format!("{libname}")).unwrap_or_else(|_| { halt_compilation("[E011] Failed to load library, check permissions and path", &line)});
-        libcollection.push(libcontent.split("\n").map(|x| {x.to_owned()}).collect());
-        *line = "".to_owned();
+        let libname: String = source_code[i][5..].to_owned();
+        let libcontent = std::fs::read_to_string(format!("{libname}")).unwrap_or_else(|_| { halt_compilation("[E011] Failed to load library, check permissions and path", &source_code[i])});
+        source_code[i] = "".to_owned();
+        for line in libcontent.lines() {
+            source_code.push(line.to_owned());
+        }
+        i += 1;
     }
 
-    for libcontent in libcollection {
-        for line in libcontent {
-            source_code.push(line);
-        }
-    }
 
     // Pass 1
     // Remove all comments

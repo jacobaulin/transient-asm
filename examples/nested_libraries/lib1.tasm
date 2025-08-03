@@ -1,0 +1,4 @@
+*lib lib2.tasm
+
+#lib1_jmp
+jmp #lib2_jmp

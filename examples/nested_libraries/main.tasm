@@ -1,0 +1,2 @@
+jmp #lib1_jmp
+*lib lib1.tasm

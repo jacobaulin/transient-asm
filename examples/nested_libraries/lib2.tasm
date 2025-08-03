@@ -1,0 +1,3 @@
+#lib2_jmp
+putc 70
+hlt
