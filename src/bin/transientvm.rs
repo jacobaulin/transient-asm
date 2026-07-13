@@ -114,7 +114,10 @@ impl TransientState {
             let fetch_stage_1 = &self.memory[address..][..8];
             let ptr_address = u64::from_be_bytes(u64_pad_be(&fetch_stage_1)) as usize;
             if self.memory.len() < ptr_address + 8 {
-                panic!("Halt: Attempted pointer write beyond memory space! Pointer at {} attempted to write at {}.\n-> Program Counter: {}, Transient Memory:\n{:?}", address, ptr_address, self.program_counter, self.memory);
+                panic!(
+                    "Halt: Attempted pointer write beyond memory space! Pointer at {} attempted to write at {}.\n-> Program Counter: {}, Transient Memory:\n{:?}",
+                    address, ptr_address, self.program_counter, self.memory
+                );
             }
             self.memory[ptr_address..][..8].copy_from_slice(&data[data.len() - 8..][..8]);
             return;
@@ -130,7 +133,10 @@ impl TransientState {
         if ptr_mode == 1 {
             let ptr_address = u64::from_be_bytes(u64_pad_be(&fetch_stage_1)) as usize;
             if self.memory.len() < ptr_address + 8 {
-                panic!("Halt: Attempted pointer read beyond memory space! Pointer at {} attempted to write at {}.\n-> Program Counter: {}, Transient Memory:\n{:?}", address, ptr_address, self.program_counter, self.memory);
+                panic!(
+                    "Halt: Attempted pointer read beyond memory space! Pointer at {} attempted to write at {}.\n-> Program Counter: {}, Transient Memory:\n{:?}",
+                    address, ptr_address, self.program_counter, self.memory
+                );
             }
             let fetch_stage_2 = &self.memory[ptr_address..][..8];
             return fetch_stage_2;
@@ -166,7 +172,7 @@ impl TransientState {
                     &(source1_data
                         .checked_add(source2_data)
                         .expect("Halt: Arithmetic overflow"))
-                        .to_be_bytes(),
+                    .to_be_bytes(),
                     dest_ptr,
                 );
                 self.program_counter + 8
@@ -177,7 +183,7 @@ impl TransientState {
                     &(source1_data
                         .checked_sub(source2_data)
                         .expect("Halt: Arithmetic overflow"))
-                        .to_be_bytes(),
+                    .to_be_bytes(),
                     dest_ptr,
                 );
                 self.program_counter + 8
@@ -188,7 +194,7 @@ impl TransientState {
                     &(source1_data
                         .checked_mul(source2_data)
                         .expect("Halt: Arithmetic overflow"))
-                        .to_be_bytes(),
+                    .to_be_bytes(),
                     dest_ptr,
                 );
                 self.program_counter + 8
@@ -199,7 +205,7 @@ impl TransientState {
                     &(source1_data
                         .checked_div(source2_data)
                         .expect("Halt: Arithmetic overflow"))
-                        .to_be_bytes(),
+                    .to_be_bytes(),
                     dest_ptr,
                 );
                 self.program_counter + 8
@@ -286,7 +292,7 @@ impl TransientState {
             CAL => {
                 self.call_stack.push(self.program_counter + 8);
                 source1_address
-            },
+            }
             CIE => {
                 if source2_data == 0 {
                     // Zero
@@ -307,9 +313,10 @@ impl TransientState {
                     self.program_counter + 8
                 }
             }
-            RET => {
-                self.call_stack.pop().expect("Halt: Attempt to return from empty call stack")
-            }
+            RET => self
+                .call_stack
+                .pop()
+                .expect("Halt: Attempt to return from empty call stack"),
             HLT => {
                 self.mode = TransientMode::HALTED;
                 self.program_counter
@@ -317,7 +324,12 @@ impl TransientState {
             _ => {
                 panic!(
                     "Halt: Unsupported opcode! Instruction: 0x{:0>2x}{:0>4x}{:0>4x}{:0>4x}\n-> Program Counter: {}, Transient Memory:\n{:?}",
-                    opcode, source1_address, source2_address, destination_address, self.program_counter, self.memory
+                    opcode,
+                    source1_address,
+                    source2_address,
+                    destination_address,
+                    self.program_counter,
+                    self.memory
                 );
             }
         }
