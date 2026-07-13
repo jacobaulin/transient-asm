@@ -11,19 +11,19 @@ ret
 // Set list index value
 // arg1: list_base_ptr, arg2: list_index, arg3: value
 #list_set_index
-call #__list_set_index
+cal #__list_set_index
 ret
 
 // Get list index value
 // arg1: list_base_ptr, arg2: list_index, ret1: value
 #list_get_index
-call __list_get_index
+cal __list_get_index
 ret
 
 // Print list
 // arg1: list_base_ptr, arg2: list_size
 #list_print
-call #__list_print
+cal #__list_print
 ret
 
 

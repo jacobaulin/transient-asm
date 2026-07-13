@@ -1,0 +1,86 @@
+// List management library for dynamic size lists
+
+*lib ./stlib/memory.tasm
+
+
+set dynamic_linked_list_arg1
+set dynamic_linked_list_arg2
+set dynamic_linkel_list_arg3
+
+set dynamic_linked_list_ret1
+
+set _base_ptr
+set _lists
+set _base_list_element
+set _list_ptr
+set _perm_base_ptr
+
+
+#_initialize
+mov 2 memory_arg1
+cal #memory_allocate
+mov memory_ret1 _base_ptr
+// mov &_base_ptr _base_list_element
+// add _base_list_element 4 _base_list_element
+mov _base_ptr _perm_base_ptr
+ret
+
+#_initialize_list
+cne #_initialize _base_ptr
+mov 2 memory_arg1
+cal #memory_allocate
+mov memory_ret1 _list_ptr
+mov _list_ptr >_base_ptr
+set _base_ptr_8
+add base_ptr 8 _base_ptr_8
+cal #memory_allocate
+mov memory_ret1 _base_ptr
+mov _base_ptr >_base_ptr_8
+add 1 _lists _lists
+mov _lists dynamic_linked_list_ret1
+ret
+
+#_add_element
+set _value
+set _list
+mov dynamic_linked_list_arg1 _list
+mov dynamic_linked_list_arg2 _value
+set _next_ptr
+mov 2 memory_arg1
+cal #memory_allocate
+mov memory_ret1 _next_ptr
+set _first_value_ptr
+set _first_value_ptr_8
+cal #_get_first_value_ptr
+set _last_spot
+cal #_last_list_spot
+mov _value >_last_spot
+ret
+
+#_last_list_spot
+jne #_last_list_spot_found >_first_value_ptr_8
+
+add 8 >_first_value_ptr_8 _first_value_ptr_8
+
+jmp #_last_list_spot
+#_last_list_spot_found
+mov >first_value_ptr_8 _last_spot
+ret
+
+#_get_first_value_ptr
+mov >_perm_base_ptr _first_value_ptr
+set _haha_ptr
+mov _perm_base_ptr _haha_ptr
+set _haha_ptr_8
+
+#_firts_value_ptr_recur
+add 8 _haha_ptr _haha_ptr_8
+
+sub _list 1 _list
+jne #_first_value_ptr_recure_stop _list
+mov >_haha_ptr_8 _first_value_ptr
+mov _haha_ptr_8 _haha_ptr
+jie #_first_value_ptr_recur _list
+#_first_value_ptr_recur_stop
+add 8 _first_value_ptr _first_value_ptr_8
+ret

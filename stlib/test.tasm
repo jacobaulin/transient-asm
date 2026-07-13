@@ -1,0 +1,8 @@
+set pekare
+imz pekare
+
+#hopp
+add 1 pekare pekare
+mov pekare >pekare
+cal #hopp
+
