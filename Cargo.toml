@@ -2,7 +2,7 @@
 name = "transient-asm"
 description = "Toolchain for TransientAssembly. Includes a compiler and virtual machine."
 version = "0.1.1"
-edition = "2021"
+edition = "2024"
 license = "MIT"
 repository = "https://github.com/redtechtiger/transient-asm"
 
