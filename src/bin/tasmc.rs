@@ -1,3 +1,4 @@
+use std::path::{Path, PathBuf};
 use std::{env, fs};
 
 #[derive(Clone, Debug)]
@@ -377,25 +378,58 @@ impl Parser {
     }
 }
 
-fn main() -> Result<(), ()> {
-    print!("tasmc: läser fil.");
-    let path: String = env::args().collect::<Vec<String>>()[1].clone();
-    let src = fs::read_to_string(path).expect("input source unreachable!");
+#[derive(Clone, Debug)]
+struct Source {
+    path: PathBuf,
+    ast: AST,
+}
 
-    println!("tasmc: utför lexikografisk analys.\r");
+fn import_library(path: &Path) -> Vec<Source> {
+    println!("tasmc: [{:?} | 1/4] läser fil.", &path.file_name().unwrap());
+    let src = fs::read_to_string(&path).expect("felaktig bibliotekssökväg!");
+
+    println!(
+        "tasmc: [{:?} | 2/4] utför lexikografisk analys.",
+        &path.file_name().unwrap()
+    );
     let mut lexer = Lexer::new(&src);
     let tokens = lexer
         .lex()
         .expect("fel: lexikografisk analys misslyckades.");
 
-    println!("tasmc: utför syntaktisk analys.\r");
+    println!(
+        "tasmc: [{:?} | 3/4] utför syntaktisk analys.",
+        &path.file_name().unwrap()
+    );
     let mut parser = Parser::new(tokens.clone());
     let ast: AST = parser
         .parse()
         .expect("fel: syntaktisk analys misslyckades.");
 
-    // dbg!(tokens);
-    // dbg!(ast);
+    println!(
+        "tasmc: [{:?} | 4/4] länkar bibliotek.",
+        &path.file_name().unwrap()
+    );
+    let mut sources: Vec<Source> = vec![Source {
+        path: PathBuf::from(&path),
+        ast: ast.clone(),
+    }];
+    for library in &ast.libraries {
+        let mut lib_path: PathBuf = path.into();
+        lib_path.pop();
+        lib_path.extend(PathBuf::from(library).iter());
+        sources.extend(import_library(&lib_path).iter().cloned());
+    }
+    sources
+}
 
+fn main() -> Result<(), ()> {
+    println!("< tasmc >");
+    let path: String = env::args().collect::<Vec<String>>()[1].clone();
+    let path: PathBuf = fs::canonicalize(path).expect("lyckades inte normalisera källfil");
+
+    let sources: Vec<Source> = import_library(&path);
+
+    dbg!(sources);
     Ok(())
 }
