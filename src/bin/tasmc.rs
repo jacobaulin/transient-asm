@@ -400,9 +400,16 @@ struct Namespaces {
 }
 
 #[derive(Clone, Debug)]
-enum NamespaceIdentifier {
-    Tag { id: u64, name: String },
-    Variable { id: u64, name: String },
+struct NamespaceIdentifier {
+    id: u64,
+    name: String,
+    idtype: IdentifierType,
+}
+
+#[derive(Clone, Debug)]
+enum IdentifierType {
+    Tag,
+    Variable(Option<u64>),
 }
 
 impl Namespaces {
@@ -423,47 +430,122 @@ impl Namespaces {
         name.hash(&mut hasher);
         hasher.finish()
     }
+    pub fn get_identifier(
+        &self,
+        name: &str,
+        path: Option<&Path>,
+    ) -> Result<NamespaceIdentifier, ()> {
+        // private identifier resolution.
+        if Self::is_private(name)
+            && let Some(path) = path
+        {
+            if let Some(identifiers) = self.private_identifiers.get(path)
+                && let Some(identifier) = identifiers.get(name)
+            {
+                return Ok(identifier.clone());
+            }
+        }
+
+        // public identifier resolution.
+        if let Some(identifier) = self.public_identifiers.get(name) {
+            return Ok(identifier.clone());
+        }
+
+        // identifier does not exist.
+        Err(())
+    }
+    // fails if identifier is already set.
+    fn set_identifier(
+        &mut self,
+        name: &str,
+        path: &Path,
+        idtype: IdentifierType,
+    ) -> Result<(), ()> {
+        if Self::is_private(name) {
+            let identifiers = self
+                .private_identifiers
+                .entry(path.to_owned())
+                .or_insert(HashMap::new());
+            if identifiers.contains_key(name) {
+                return Err(());
+            }
+            identifiers.insert(
+                name.to_owned(),
+                NamespaceIdentifier {
+                    id: Self::hash_private(path, name),
+                    name: name.to_owned(),
+                    idtype,
+                },
+            );
+            Ok(())
+        } else {
+            if self.public_identifiers.contains_key(name) {
+                return Err(());
+            }
+            self.public_identifiers.insert(
+                name.to_owned(),
+                NamespaceIdentifier {
+                    id: Self::hash_public(name),
+                    name: name.to_owned(),
+                    idtype,
+                },
+            );
+            Ok(())
+        }
+    }
 }
 
 // att göra: kontrollera så att identifierare inte dupliceras / defineras flera gånger.
 //           slutföra variabler.
-impl From<Vec<Source>> for Namespaces {
-    fn from(sources: Vec<Source>) -> Self {
-        let namespaces = Namespaces {
+impl TryFrom<&Vec<Source>> for Namespaces {
+    type Error = ();
+    fn try_from(sources: &Vec<Source>) -> Result<Self, Self::Error> {
+        let mut namespaces = Namespaces {
             private_identifiers: HashMap::new(),
             public_identifiers: HashMap::new(),
         };
 
         for source in sources {
-            for instruction in source.ast.instructions {
+            for instruction in &source.ast.instructions {
                 match instruction.clone() {
                     ASTInstruction::Tag(x) => {
-                        if Self::is_private(&x) {
-                            /*
-                            namespaces.private_identifiers[&source.path][&x] =
-                                    NamespaceIdentifier::Tag {
-                                        id: Self::hash_private(&source.path, &x),
-                                        name: x.clone(),
-                                };
-                            */
-                        } else {
-                            /*
-                            namespaces.public_identifiers[&x] =
-                                NamespaceIdentifier::Tag {
-                                    id: Self::hash_public(&x),
-                                    name: x.clone(),
-                                };
-                            */
-                        }
+                        namespaces.set_identifier(&x, &source.path, IdentifierType::Tag)?;
                     }
                     ASTInstruction::VMStep(opcode, args) => {
-                        todo!();
+                        match opcode {
+                            ASTOpcode::Set => (),
+                            _ => continue,
+                        }
+                        if let Some(arg1) = args.get(0)
+                            && let ASTArgument::Variable(name) = arg1
+                        {
+                            let value: Option<u64> = match args.get(1) {
+                                None => None,
+                                Some(ASTArgument::Immediate(x)) => Some(*x),
+                                _ => {
+                                    eprintln!("! ogiltigt initieringsvärde för `set`");
+                                    return Err(());
+                                }
+                            };
+                            if args.len() > 2 {
+                                eprintln!("! överflödig data efter `set`");
+                                return Err(());
+                            }
+                            namespaces.set_identifier(
+                                &name,
+                                &source.path,
+                                IdentifierType::Variable(value),
+                            )?;
+                        } else {
+                            eprintln!("! `set` måste efterföljas av en giltig identifierare");
+                            return Err(());
+                        }
                     }
                 }
             }
         }
 
-        namespaces
+        Ok(namespaces)
     }
 }
 
@@ -532,8 +614,11 @@ fn main() -> Result<(), ()> {
 
     let sources: Vec<Source> = import_library(&path, None);
 
-    println!("tasmc: [källor] löser namnrymd");
+    dbg!(&sources);
 
-    dbg!(sources);
+    println!("tasmc: [källor] löser namnrymd");
+    let namespaces: Namespaces = (&sources).try_into()?;
+
+    dbg!(&namespaces);
     Ok(())
 }
