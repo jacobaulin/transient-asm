@@ -1,8 +1,33 @@
-set pekare
-imz pekare
+*lib dynamic_linked_list.tasm
 
-#hopp
-add 1 pekare pekare
-mov pekare >pekare
-cal #hopp
+set lista 6
+
+cal #initialize_list
+mov dynamic_linked_list_ret1 lista
+puti lista
+putc 10
+//hlt
+mov lista dynamic_linked_list_arg1
+mov 5 dynamic_linked_list_arg2
+cal #add_element
+mov 1 dynamic_linked_list_arg2
+cal #lookup_element
+puti dynamic_linked_list_ret1
+
+putc 10
+
+mov 7 dynamic_linked_list_arg2
+mov 1 dynamic_linked_list_arg3
+cal #change_element
+mov 1 dynamic_linked_list_arg2
+cal #lookup_element
+puti dynamic_linked_list_ret1
+
+putc 10
+
+cal #count_elements
+puti dynamic_linked_list_ret1
+
+putc 10
+hlt
 
