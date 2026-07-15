@@ -107,10 +107,11 @@ fn preprocess_source_code(
         }
         included_libraries.insert(libname);
         for line in libcontent.lines() {
-            source_code.push(line.to_owned());
+            source_code.push(line.replace("\r", "").to_owned());
         }
         i += 1;
     }
+
 
     // Pass 1
     // Remove all comments
@@ -685,7 +686,7 @@ fn main() {
     if let Err(_) = input_file.read_to_string(&mut source_code) {
         panic!("Stop: Failed to read file contents");
     }
-    let source_code: Vec<String> = source_code.split("\n").map(|x| x.to_owned()).collect();
+    let source_code: Vec<String> = source_code.split("\n").map(|x| x.replace("\r", "").to_owned()).collect();
     print!("Compiling... [          ]\r");
     std::io::stdout().flush().unwrap();
 
