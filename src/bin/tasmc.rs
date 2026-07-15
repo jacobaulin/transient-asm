@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::{env, fs};
 
@@ -144,7 +146,6 @@ impl Lexer {
 struct AST {
     pub libraries: Vec<String>,
     pub instructions: Vec<ASTInstruction>,
-    pub variables: Vec<String>,
 }
 
 impl AST {
@@ -152,7 +153,6 @@ impl AST {
         AST {
             libraries: vec![],
             instructions: vec![],
-            variables: vec![],
         }
     }
 }
@@ -355,8 +355,14 @@ impl Parser {
                         loop {
                             let peek = self.peek().expect("");
                             match peek {
-                                Token::EOF => break,
-                                Token::Newline => break,
+                                Token::EOF => {
+                                    self.advance();
+                                    break;
+                                }
+                                Token::Newline => {
+                                    self.advance();
+                                    break;
+                                }
                                 _ => (),
                             }
                             args.push(self.parse_argument()?);
@@ -384,7 +390,92 @@ struct Source {
     ast: AST,
 }
 
-fn import_library(path: &Path) -> Vec<Source> {
+#[derive(Clone, Debug)]
+struct IR {}
+
+#[derive(Clone, Debug)]
+struct Namespaces {
+    pub private_identifiers: HashMap<PathBuf, HashMap<String, NamespaceIdentifier>>,
+    pub public_identifiers: HashMap<String, NamespaceIdentifier>,
+}
+
+#[derive(Clone, Debug)]
+enum NamespaceIdentifier {
+    Tag { id: u64, name: String },
+    Variable { id: u64, name: String },
+}
+
+impl Namespaces {
+    fn is_private(name: &str) -> bool {
+        name.len() <= 0 || name.chars().nth(0).unwrap() == '_'
+    }
+    fn is_public(name: &str) -> bool {
+        !Self::is_private(name)
+    }
+    fn hash_private(path: &Path, name: &str) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        path.hash(&mut hasher);
+        name.hash(&mut hasher);
+        hasher.finish()
+    }
+    fn hash_public(name: &str) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        name.hash(&mut hasher);
+        hasher.finish()
+    }
+}
+
+// att göra: kontrollera så att identifierare inte dupliceras / defineras flera gånger.
+//           slutföra variabler.
+impl From<Vec<Source>> for Namespaces {
+    fn from(sources: Vec<Source>) -> Self {
+        let namespaces = Namespaces {
+            private_identifiers: HashMap::new(),
+            public_identifiers: HashMap::new(),
+        };
+
+        for source in sources {
+            for instruction in source.ast.instructions {
+                match instruction.clone() {
+                    ASTInstruction::Tag(x) => {
+                        if Self::is_private(&x) {
+                            /*
+                            namespaces.private_identifiers[&source.path][&x] =
+                                    NamespaceIdentifier::Tag {
+                                        id: Self::hash_private(&source.path, &x),
+                                        name: x.clone(),
+                                };
+                            */
+                        } else {
+                            /*
+                            namespaces.public_identifiers[&x] =
+                                NamespaceIdentifier::Tag {
+                                    id: Self::hash_public(&x),
+                                    name: x.clone(),
+                                };
+                            */
+                        }
+                    }
+                    ASTInstruction::VMStep(opcode, args) => {
+                        todo!();
+                    }
+                }
+            }
+        }
+
+        namespaces
+    }
+}
+
+fn import_library(path: &Path, state: Option<&Vec<Source>>) -> Vec<Source> {
+    // scan state to prevent library link duplication and/or recursion.
+    if let Some(state) = state {
+        for source in state {
+            if source.path == path {
+                return vec![];
+            }
+        }
+    }
     println!("tasmc: [{:?} | 1/4] läser fil.", &path.file_name().unwrap());
     let src = fs::read_to_string(&path).expect("felaktig bibliotekssökväg!");
 
@@ -418,7 +509,18 @@ fn import_library(path: &Path) -> Vec<Source> {
         let mut lib_path: PathBuf = path.into();
         lib_path.pop();
         lib_path.extend(PathBuf::from(library).iter());
-        sources.extend(import_library(&lib_path).iter().cloned());
+
+        // state is used for detecting duplicated or recursive library links.
+        let mut child_state = sources.clone();
+        if let Some(state) = state {
+            child_state.extend(state.clone());
+        }
+
+        sources.extend(
+            import_library(&lib_path, Some(&child_state))
+                .iter()
+                .cloned(),
+        );
     }
     sources
 }
@@ -428,7 +530,9 @@ fn main() -> Result<(), ()> {
     let path: String = env::args().collect::<Vec<String>>()[1].clone();
     let path: PathBuf = fs::canonicalize(path).expect("lyckades inte normalisera källfil");
 
-    let sources: Vec<Source> = import_library(&path);
+    let sources: Vec<Source> = import_library(&path, None);
+
+    println!("tasmc: [källor] löser namnrymd");
 
     dbg!(sources);
     Ok(())
