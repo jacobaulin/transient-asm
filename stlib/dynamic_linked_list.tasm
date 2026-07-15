@@ -9,9 +9,39 @@ set dynamic_linkel_list_arg3
 
 set dynamic_linked_list_ret1
 
+// Initialize a new list
+// ret1: Listnumber
+#initialize_list
+cal #_initialize_list
+ret
+
+// Add element at the end of list
+// arg1: Listnumber arg2: Value
+#add_element
+cal #_add_element
+ret
+
+// Change the value of a element
+// arg1: Listnumber arg2: New value arg3: List position
+#change_element
+cal #_change_element
+ret
+
+// Lookup value at Listposition
+// arg1: Listnumber arg2: Listposition ret1: Value
+#lookup_element
+cal #_lookup_element
+ret
+
+// Count elements in list
+// arg1: Listnumber ret1: List length
+#count_elements
+cal #_count_elements
+ret
+
 set _base_ptr
 set _lists
-set _base_list_element
+// set _base_list_element
 set _list_ptr
 set _perm_base_ptr
 
@@ -58,8 +88,9 @@ mov _value >_last_spot
 ret
 
 #_last_list_spot
+set _total_elements
 jne #_last_list_spot_found >_first_value_ptr_8
-
+add 1 _total_elements _total_elements
 add 8 >_first_value_ptr_8 _first_value_ptr_8
 
 jmp #_last_list_spot
@@ -83,4 +114,40 @@ mov _haha_ptr_8 _haha_ptr
 jie #_first_value_ptr_recur _list
 #_first_value_ptr_recur_stop
 add 8 _first_value_ptr _first_value_ptr_8
+ret
+
+
+#_change_element
+mov dynamic_linked_list_arg1 _list
+mov dynamic_linked_list_arg2 _value
+set _spot
+mov dynamic_linked_list_arg3 _spot
+cal #_get_first_value_ptr
+cal #_list_spot
+mov _value >_spot
+ret
+
+#_list_spot
+sub _spot 1 _spot
+jne #_spot_found _spot
+add 8 >_first_value_ptr_8 _first_value_ptr_8
+jmp #_list_spot
+#_spot_found
+mov >_first_value_ptr_8 _spot
+ret
+
+#_count_elements
+mov dynamic_linked_list_arg1 _list
+mov 0 _total_elements
+cal #_get_first_value_ptr
+cal #_last_list_spot
+mov _total_elements dynamic_linked_list_ret1
+ret
+
+#_lookup_element
+mov dynamic_linked_list_arg1 _list
+mov dynamic_linked_list_arg2 _spot
+cal #_get_first_value_ptr
+cal #_list_spot
+mov >_spot dynamic_linked_list_ret1
 ret
