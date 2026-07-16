@@ -29,5 +29,43 @@ cal #dyll_count_elements
 puti dyll_ret1
 
 putc 10
+
+mov 1 dyll_arg2
+mov 1 dyll_arg2
+cal #dyll_add_element
+mov 2 dyll_arg2
+cal #dyll_add_element
+mov 3 dyll_arg2
+cal #dyll_add_element
+mov 4 dyll_arg2
+cal #dyll_add_element
+mov 5 dyll_arg2
+cal #dyll_add_element
+cal #dyll_count_elements
+puti dyll_ret1
+
+putc 10
+
+mov 4 dyll_arg2
+cal #dyll_delete_element
+cal #dyll_count_elements
+puti dyll_ret1
+
+
+putc 10
+
+mov 4 dyll_arg2
+cal #dyll_lookup_element
+puti dyll_ret1
+putc 10
+mov 3 dyll_arg2
+cal #dyll_lookup_element
+puti dyll_ret1
+putc 10
+mov 5 dyll_arg2
+cal #dyll_lookup_element
+puti dyll_ret1
+
+putc 10
 hlt
 

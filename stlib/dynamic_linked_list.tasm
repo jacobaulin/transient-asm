@@ -10,116 +10,89 @@ set dyll_arg3
 set dyll_ret1
 
 // Initialize a new list
-// ret1: Listnumber
+// ret1: Ptr to list base
 #dyll_initialize_list
 cal #_initialize_list
 ret
 
 // Add element at the end of list
-// arg1: Listnumber arg2: Value
+// arg1: Listptr arg2: Value
 #dyll_add_element
 cal #_add_element
 ret
 
 // Change the value of a element
-// arg1: Listnumber arg2: New value arg3: List position
+// arg1: Listptr arg2: New value arg3: List position
 #dyll_change_element
 cal #_change_element
 ret
 
 // Lookup value at Listposition
-// arg1: Listnumber arg2: Listposition ret1: Value
+// arg1: Listptr arg2: Listposition ret1: Value
 #dyll_lookup_element
 cal #_lookup_element
 ret
 
 // Count elements in list
-// arg1: Listnumber ret1: List length
+// arg1: Listptr ret1: List length
 #dyll_count_elements
 cal #_count_elements
 ret
 
-set _base_ptr
-set _lists
-set _list_ptr
-set _perm_base_ptr
-
-
-#_initialize
-mov 2 mem_arg1
-cal #mem_allocate
-mov mem_ret1 _base_ptr
-mov _base_ptr _perm_base_ptr
+// Remove element from list
+// Attention: This is a memory leak. You wont get back the unused memory automaticaly
+// arg1: Listptr arg2: Position
+#dyll_delete_element
+#_delete_element
 ret
 
+
+set _list_ptr
+set _list_ptr_8
+
+
 #_initialize_list
-cne #_initialize _base_ptr
 mov 2 mem_arg1
 cal #mem_allocate
 mov mem_ret1 _list_ptr
-mov _list_ptr >_base_ptr
-set _base_ptr_8
-add _base_ptr 8 _base_ptr_8
-cal #mem_allocate
-mov mem_ret1 _base_ptr
-mov _base_ptr >_base_ptr_8
-add 1 _lists _lists
-mov _lists dyll_ret1
+mov _list_ptr dyll_ret1
 ret
 
 #_add_element
 set _value
-set _list
-mov dyll_arg1 _list
+mov dyll_arg1 _list_ptr
 mov dyll_arg2 _value
 set _next_ptr
 mov 2 mem_arg1
 cal #mem_allocate
 mov mem_ret1 _next_ptr
-set _first_value_ptr
-set _first_value_ptr_8
-cal #_get_first_value_ptr
 set _last_spot
+add 8 _list_ptr _list_ptr_8
 cal #_last_list_spot
 mov _value >_last_spot
+set _last_spot_8
+add 8 _last_spot _last_spot_8
+mov _next_ptr >_last_spot_8
 ret
 
 #_last_list_spot
 set _total_elements
+jne #_last_list_spot_found >_list_ptr_8
 add 1 _total_elements _total_elements
-jne #_last_list_spot_found >_first_value_ptr_8
-add 8 >_first_value_ptr_8 _first_value_ptr_8
-
+mov >_list_ptr_8 _list_ptr
+add 8 >_list_ptr_8 _list_ptr_8
 jmp #_last_list_spot
+
 #_last_list_spot_found
-mov >_first_value_ptr_8 _last_spot
+mov _list_ptr _last_spot
 ret
-
-#_get_first_value_ptr
-mov >_perm_base_ptr _first_value_ptr
-set _haha_ptr
-mov _perm_base_ptr _haha_ptr
-set _haha_ptr_8
-
-#_first_value_ptr_recur
-add 8 _haha_ptr _haha_ptr_8
-
-sub _list 1 _list
-jne #_first_value_ptr_recur_stop _list
-mov >_haha_ptr_8 _first_value_ptr
-mov _haha_ptr_8 _haha_ptr
-jie #_first_value_ptr_recur _list
-#_first_value_ptr_recur_stop
-add 8 _first_value_ptr _first_value_ptr_8
-ret
-
 
 #_change_element
-mov dyll_arg1 _list
+mov dyll_arg1 _list_ptr
 mov dyll_arg2 _value
 set _spot
 mov dyll_arg3 _spot
-cal #_get_first_value_ptr
+add 8 _list_ptr _list_ptr_8
 cal #_list_spot
 mov _value >_spot
 ret
@@ -127,24 +100,45 @@ ret
 #_list_spot
 sub _spot 1 _spot
 jne #_spot_found _spot
-add 8 >_first_value_ptr_8 _first_value_ptr_8
+add 8 >_list_ptr_8 _list_ptr_8
 jmp #_list_spot
 #_spot_found
-mov >_first_value_ptr_8 _spot
+sub _list_ptr_8 8 _list_ptr
+mov _list_ptr _spot
 ret
 
 #_count_elements
-mov dyll_arg1 _list
+mov dyll_arg1 _list_ptr
 mov 0 _total_elements
-cal #_get_first_value_ptr
+add 8 _list_ptr _list_ptr_8
 cal #_last_list_spot
 mov _total_elements dyll_ret1
 ret
 
 #_lookup_element
-mov dyll_arg1 _list
+mov dyll_arg1 _list_ptr
 mov dyll_arg2 _spot
-cal #_get_first_value_ptr
+add 8 _list_ptr _list_ptr_8
 cal #_list_spot
 mov >_spot dyll_ret1
+ret
+
+#_delete_element
+mov dyll_arg1 _list_ptr
+mov dyll_arg2 _spot
+add 8 _list_ptr _list_ptr_8
+cal #_list_spot
+set _to_delete
+set _to_delete_8
+set _before
+mov _spot _to_delete
+add 8 _to_delete _to_delete_8
+sub dyll_arg2 1 _spot
+mov dyll_arg1 _list_ptr
+add 8 _list_ptr _list_ptr_8
+cal #_list_spot
+add 8 _spot _before
+mov >_to_delete_8 >_before
+mov 0 >_to_delete
+mov 0 >_to_delete_8
 ret
