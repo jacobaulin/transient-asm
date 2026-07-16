@@ -1,32 +1,32 @@
-*lib dynamic_linked_list.tasm
+*lib ./stlib/dynamic_linked_list.tasm
 
 set lista 6
 
-cal #initialize_list
-mov dynamic_linked_list_ret1 lista
+cal #dyll_initialize_list
+mov dyll_ret1 lista
 puti lista
 putc 10
 //hlt
-mov lista dynamic_linked_list_arg1
-mov 5 dynamic_linked_list_arg2
-cal #add_element
-mov 1 dynamic_linked_list_arg2
-cal #lookup_element
-puti dynamic_linked_list_ret1
+mov lista dyll_arg1
+mov 5 dyll_arg2
+cal #dyll_add_element
+mov 1 dyll_arg2
+cal #dyll_lookup_element
+puti dyll_ret1
 
 putc 10
 
-mov 7 dynamic_linked_list_arg2
-mov 1 dynamic_linked_list_arg3
-cal #change_element
-mov 1 dynamic_linked_list_arg2
-cal #lookup_element
-puti dynamic_linked_list_ret1
+mov 7 dyll_arg2
+mov 1 dyll_arg3
+cal #dyll_change_element
+mov 1 dyll_arg2
+cal #dyll_lookup_element
+puti dyll_ret1
 
 putc 10
 
-cal #count_elements
-puti dynamic_linked_list_ret1
+cal #dyll_count_elements
+puti dyll_ret1
 
 putc 10
 hlt

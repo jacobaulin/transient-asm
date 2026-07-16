@@ -2,27 +2,27 @@
 
 // Get next free space in memory
 // arg1: size (x8), ret1: memory_position
-#memory_allocate
-cal #__memory_allocate
+#mem_allocate
+cal #_allocate
 ret
 
 
 
-#__memory_initialize
-set __memory_map_ptr
-imz __memory_map_ptr
+#_initialize
+set _map_ptr
+imz _map_ptr
 ret
 
-#__memory_allocate
-cne #__memory_initialize __memory_map_ptr
-mov __memory_map_ptr memory_ret1
-set __memory_map_offset
-mov memory_arg1 __memory_map_offset
-mul 8 __memory_map_offset __memory_map_offset
-add __memory_map_offset __memory_map_ptr __memory_map_ptr
+#_allocate
+cne #_initialize _map_ptr
+mov _map_ptr mem_ret1
+set _map_offset
+mov mem_arg1 _map_offset
+mul 8 _map_offset _map_offset
+add _map_offset _map_ptr _map_ptr
 ret
 
 
 
-set memory_arg1
-set memory_ret1
+set mem_arg1
+set mem_ret1
