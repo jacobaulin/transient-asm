@@ -39,6 +39,7 @@ ret
 cal #_count_elements
 ret
 
+// Dosnt work and i dont know why
 // Remove element from list
 // Attention: This is a memory leak. You wont get back the unused memory automaticaly
 // arg1: Listptr arg2: Position
