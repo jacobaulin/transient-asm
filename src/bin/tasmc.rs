@@ -674,11 +674,14 @@ impl<'a> LIR<'a> {
             }
         } else {
             // todo: also hacky.
-            let id = self.namespaces.hash_private(path, &format!("&{}", addr_label.0.0.to_string()));
+            let id = self
+                .namespaces
+                .hash_private(path, &format!("&{}", addr_label.0.0.to_string()));
             assert!(self.labels.contains_key(&addr_label));
             self.address_handles.insert(addr_label, LIRLabel(id));
             assert!(!self.labels.contains_key(&LIRLabel(id)));
-            self.labels.insert(LIRLabel(id), LIRData::AddressOf(addr_label));
+            self.labels
+                .insert(LIRLabel(id), LIRData::AddressOf(addr_label));
             LIRArgument {
                 label: LIRLabel(id),
                 ptr_mode: LIRPtrMode::Unset,
@@ -700,7 +703,6 @@ impl<'a> LIR<'a> {
             LIRArgument {
                 label: LIRLabel(id),
                 ptr_mode: LIRPtrMode::Unset,
-
             }
         }
     }
@@ -728,35 +730,33 @@ impl<'a> LIR<'a> {
                 }
             }
             ASTArgument::Address(x) => {
-                let addr_id = self.namespaces.get_identifier(&x, Some(path)).expect("variabeln kunde ej hittas");
+                let addr_id = self
+                    .namespaces
+                    .get_identifier(&x, Some(path))
+                    .expect("variabeln kunde ej hittas");
                 self.resolve_address(path, LIRLabel(addr_id.id))
             }
-            ASTArgument::Immediate(x) => {
-                self.resolve_immediate(x)
-            }
+            ASTArgument::Immediate(x) => self.resolve_immediate(x),
         }
     }
     fn resolve_tag(&mut self, ast_arg: ASTArgument, path: &Path) -> LIRTag {
         match ast_arg {
             ASTArgument::Tag(x) => {
-                let id = self.namespaces.get_identifier(&x, Some(path)).expect("kunde ej hitta taggen");
+                let id = self
+                    .namespaces
+                    .get_identifier(&x, Some(path))
+                    .expect("kunde ej hitta taggen");
                 LIRTag(id.id)
             }
-            _ => panic!("tagg förväntades, men variabel hittades")
+            _ => panic!("tagg förväntades, men variabel hittades"),
         }
     }
-    fn lower_instruction(
-        &mut self,
-        path: &Path,
-        opcode: &ASTOpcode,
-        args: &Vec<ASTArgument>,
-    ) {
+    fn lower_instruction(&mut self, path: &Path, opcode: &ASTOpcode, args: &Vec<ASTArgument>) {
         match opcode {
             ASTOpcode::Set => (),
             ASTOpcode::Mov => {
                 let (src1, dst) = unpack_vmstep!(self, path, args, Arg, Arg);
                 self.instructions.push(LIRInstruction::Mov(src1, dst));
-                
             }
             ASTOpcode::Add => {
                 let (src1, src2, dst) = unpack_vmstep!(self, path, args, Arg, Arg, Arg);
@@ -772,11 +772,13 @@ impl<'a> LIR<'a> {
             }
             ASTOpcode::Divt => {
                 let (src1, src2, dst) = unpack_vmstep!(self, path, args, Arg, Arg, Arg);
-                self.instructions.push(LIRInstruction::Divt(src1, src2, dst));
+                self.instructions
+                    .push(LIRInstruction::Divt(src1, src2, dst));
             }
             ASTOpcode::Divr => {
                 let (src1, src2, dst) = unpack_vmstep!(self, path, args, Arg, Arg, Arg);
-                self.instructions.push(LIRInstruction::Divr(src1, src2, dst));
+                self.instructions
+                    .push(LIRInstruction::Divr(src1, src2, dst));
             }
             ASTOpcode::Rem => {
                 let (src1, src2, dst) = unpack_vmstep!(self, path, args, Arg, Arg, Arg);
@@ -853,13 +855,15 @@ impl<'a> LIR<'a> {
         for map_id in lir.namespaces.private_identifiers.values() {
             for id in map_id.values() {
                 if let IdentifierType::Variable(value) = id.idtype {
-                    lir.labels.insert(LIRLabel(id.id), LIRData::Constant(value.unwrap_or(0)));
+                    lir.labels
+                        .insert(LIRLabel(id.id), LIRData::Constant(value.unwrap_or(0)));
                 }
             }
         }
         for id in lir.namespaces.public_identifiers.values() {
             if let IdentifierType::Variable(value) = id.idtype {
-                lir.labels.insert(LIRLabel(id.id), LIRData::Constant(value.unwrap_or(0)));
+                lir.labels
+                    .insert(LIRLabel(id.id), LIRData::Constant(value.unwrap_or(0)));
             }
         }
         // sources have to be lowered separately still.
@@ -867,7 +871,8 @@ impl<'a> LIR<'a> {
         for source in sources {
             for instruction in &source.ast.instructions {
                 if let ASTInstruction::Tag(tag) = instruction {
-                    let tag_id = lir.namespaces
+                    let tag_id = lir
+                        .namespaces
                         .get_identifier(tag, Some(&source.path))
                         .expect("tagg existerar ej")
                         .id;
@@ -953,9 +958,10 @@ fn main() -> Result<(), ()> {
     let mut namespaces: Namespaces = (&sources).try_into().expect("lyckades inte lösa namnrymd");
 
     println!("tasmc: [källor] genererar lågnivåstruktur");
-    let lir = LIR::generate(&sources, &mut namespaces).expect("lyckades inte generera lågnivåstruktur");
+    let lir =
+        LIR::generate(&sources, &mut namespaces).expect("lyckades inte generera lågnivåstruktur");
 
     // dbg!(&namespaces);
-    dbg!(&lir);
+    //dbg!(&lir);
     Ok(())
 }
