@@ -81,8 +81,18 @@ impl Codegen {
                 LIRData::AddressOf(label) => {
                     let value = self.get_absolute_address_label(*label);
                     let value_bytes = value.to_be_bytes();
-                    assert_eq!(value_bytes.len(), 8);
-                    bytecode.extend(value_bytes);
+                    assert_eq!(value_bytes.len(), 2);
+                    let value_bytes_padded = vec![
+                        0x00,
+                        0x00,
+                        0x00,
+                        0x00,
+                        0x00,
+                        0x00,
+                        value_bytes[0],
+                        value_bytes[1],
+                    ];
+                    bytecode.extend(value_bytes_padded);
                 }
             }
         }
@@ -295,6 +305,6 @@ impl Codegen {
             0
         };
 
-        src1_flag + src2_flag >> 1 + dst_flag >> 2
+        src1_flag + (src2_flag >> 1) + (dst_flag >> 2)
     }
 }
