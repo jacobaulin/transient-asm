@@ -1,17 +1,3 @@
-[package]
-name = "transient-asm"
-description = "Toolchain for TransientAssembly. Includes a compiler and virtual machine."
-version = "0.1.1"
-edition = "2024"
-license = "MIT"
-repository = "https://github.com/redtechtiger/transient-asm"
-
-[[bin]]
-name = "tasmvm"
-path = "src/bin/tasmvm.rs"
-
-[[bin]]
-name = "tasmc"
-path = "src/bin/tasmc.rs"
-
-[dependencies]
+[workspace]
+members = ["tasmc", "tasmvm"]
+resolver = "3"
