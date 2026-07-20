@@ -98,7 +98,7 @@ impl<'a> LIR<'a> {
         if self.labels.contains_key(&label) {
             panic!("[internt fel] kollision mellan dataetiketter i l.i.r.");
         }
-        self.labels.insert(label, data).unwrap();
+        self.labels.insert(label, data);
     }
     fn resolve_address(&mut self, path: &Path, addr_label: LIRLabel) -> LIRArgument {
         if let Some(id) = self.address_handles.get(&addr_label) {
