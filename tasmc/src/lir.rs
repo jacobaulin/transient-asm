@@ -6,40 +6,40 @@ use std::path::Path;
 
 #[derive(Debug)]
 pub struct LIR<'a> {
-    instructions: Vec<LIRInstruction>,
-    labels: HashMap<LIRLabel, LIRData>,           // <label, value>
-    tags: HashMap<LIRTag, usize>,                 // <label, index>
-    immediate_handles: HashMap<u64, LIRLabel>,    // <value, label>
+    pub instructions: Vec<LIRInstruction>,
+    pub labels: HashMap<LIRLabel, LIRData>, // <label, value>
+    pub tags: HashMap<LIRTag, usize>,       // <label, index>
+    immediate_handles: HashMap<u64, LIRLabel>, // <value, label>
     address_handles: HashMap<LIRLabel, LIRLabel>, // <underlying, immediate>
 
     namespaces: &'a mut Namespaces,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-struct LIRLabel(pub IdentifierHash);
+pub struct LIRLabel(pub IdentifierHash);
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-struct LIRTag(pub IdentifierHash);
+pub struct LIRTag(pub IdentifierHash);
 
 #[derive(Clone, Debug)]
-struct LIRArgument {
-    label: LIRLabel,
-    ptr_mode: LIRPtrMode,
+pub struct LIRArgument {
+    pub label: LIRLabel,
+    pub ptr_mode: LIRPtrMode,
 }
 
 #[derive(Clone, Debug)]
-enum LIRData {
+pub enum LIRData {
     Constant(u64),
     AddressOf(LIRLabel),
 }
 
 #[derive(Clone, Debug)]
-enum LIRPtrMode {
+pub enum LIRPtrMode {
     Unset,
     Pointer,
 }
 
 #[derive(Clone, Debug)]
-enum LIRInstruction {
+pub enum LIRInstruction {
     Mov(LIRArgument, LIRArgument),
     Add(LIRArgument, LIRArgument, LIRArgument),
     Sub(LIRArgument, LIRArgument, LIRArgument),

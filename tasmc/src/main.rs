@@ -1,10 +1,12 @@
 use std::path::PathBuf;
 use std::{env, fs};
 
+use crate::codegen::Codegen;
 use crate::libs::{Source, import_library};
 use crate::lir::LIR;
 use crate::namespaces::Namespaces;
 
+mod codegen;
 mod lexer;
 mod libs;
 mod lir;
@@ -18,14 +20,19 @@ fn main() -> Result<(), ()> {
 
     let sources: Vec<Source> = import_library(&path, None);
 
-    println!("tasmc: [källor] löser namnrymd");
-    let mut namespaces: Namespaces = (&sources).try_into().expect("lyckades inte lösa namnrymd");
+    println!("tasmc: löser namnrymd");
+    let mut namespaces: Namespaces =
+        Namespaces::try_from(&sources).expect("lyckades inte lösa namnrymd");
 
-    println!("tasmc: [källor] genererar lågnivåstruktur");
+    println!("tasmc: genererar lågnivåstruktur");
     let lir =
         LIR::generate(&sources, &mut namespaces).expect("lyckades inte generera lågnivåstruktur");
 
-    // dbg!(&namespaces);
-    //dbg!(&lir);
+    println!("tasmc: skapar bytekod");
+    let codegen = Codegen::from(lir);
+    let bytecode = codegen.dump_bytecode();
+
+    // dbg!(&bytecode);
+
     Ok(())
 }
