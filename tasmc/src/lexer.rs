@@ -63,13 +63,9 @@ impl Lexer {
                 self.lex_token()
             } else if char_read == '/' && self.peek().is_some() && self.peek().unwrap() == '/' {
                 self.advance(); // consume last '/'
-                match self.advance() {
-                    Some(x) => char_read = x,
-                    None => return Ok(Token::EOF),
-                }
-                while char_read != '\n' {
+                while let Some(c) = self.peek() && c != '\n' {
                     match self.advance() {
-                        Some(x) => char_read = x,
+                        Some(_) => (),
                         None => return Ok(Token::EOF),
                     }
                 }

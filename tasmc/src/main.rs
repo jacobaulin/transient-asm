@@ -20,8 +20,6 @@ fn main() -> Result<(), ()> {
         fs::canonicalize(source_path).expect("lyckades inte normalisera källfil");
 
     let bytecode_path: String = args.get(2).unwrap_or(&"./out.tbc".to_owned()).clone();
-    let bytecode_path: PathBuf =
-        fs::canonicalize(bytecode_path).expect("lyckades inte normalisera utdatafil");
 
     let sources: Vec<Source> = import_library(&source_path, None);
 
