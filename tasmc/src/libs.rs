@@ -19,31 +19,22 @@ pub fn import_library(path: &Path, state: Option<&Vec<Source>>) -> Vec<Source> {
             }
         }
     }
-    println!("tasmc: [{:?} | 1/4] läser fil.", &path.file_name().unwrap());
-    let src = fs::read_to_string(&path).expect("felaktig bibliotekssökväg!");
-
     println!(
-        "tasmc: [{:?} | 2/4] utför lexikografisk analys.",
+        "tasmc:\x1B[36m länkar fil [{:?}].\x1B[0m",
         &path.file_name().unwrap()
     );
+    let src = fs::read_to_string(&path).expect("felaktig bibliotekssökväg!");
+
     let mut lexer = Lexer::new(&src);
     let tokens = lexer
         .lex()
         .expect("fel: lexikografisk analys misslyckades.");
 
-    println!(
-        "tasmc: [{:?} | 3/4] utför syntaktisk analys.",
-        &path.file_name().unwrap()
-    );
     let mut parser = Parser::new(tokens.clone());
     let ast: AST = parser
         .parse()
         .expect("fel: syntaktisk analys misslyckades.");
 
-    println!(
-        "tasmc: [{:?} | 4/4] länkar bibliotek.",
-        &path.file_name().unwrap()
-    );
     let mut sources: Vec<Source> = vec![Source {
         path: PathBuf::from(&path),
         ast: ast.clone(),

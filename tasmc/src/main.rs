@@ -14,25 +14,30 @@ mod namespaces;
 mod parser;
 
 fn main() -> Result<(), ()> {
-    println!("< tasmc >");
-    let path: String = env::args().collect::<Vec<String>>()[1].clone();
-    let path: PathBuf = fs::canonicalize(path).expect("lyckades inte normalisera källfil");
+    let args: Vec<String> = env::args().collect();
+    let source_path: String = args.get(1).expect("ingen indatafil").clone();
+    let source_path: PathBuf =
+        fs::canonicalize(source_path).expect("lyckades inte normalisera källfil");
 
-    let sources: Vec<Source> = import_library(&path, None);
+    let bytecode_path: String = args.get(2).unwrap_or(&"./out.tbc".to_owned()).clone();
+    let bytecode_path: PathBuf =
+        fs::canonicalize(bytecode_path).expect("lyckades inte normalisera utdatafil");
 
-    println!("tasmc: löser namnrymd");
+    let sources: Vec<Source> = import_library(&source_path, None);
+
+    println!("tasmc: bearbetar datastruktur.");
     let mut namespaces: Namespaces =
         Namespaces::try_from(&sources).expect("lyckades inte lösa namnrymd");
 
-    println!("tasmc: genererar lågnivåstruktur");
     let lir =
         LIR::generate(&sources, &mut namespaces).expect("lyckades inte generera lågnivåstruktur");
 
-    println!("tasmc: skapar bytekod");
+    println!("tasmc: genererar bytekod.");
     let codegen = Codegen::from(lir);
     let bytecode = codegen.dump_bytecode();
 
-    // dbg!(&bytecode);
+    fs::write(bytecode_path, &bytecode).expect("lyckades inte skriva till utdatafil");
 
+    println!("tasmc:\x1B[32m kompilering slutfördes.\x1B[0m");
     Ok(())
 }
