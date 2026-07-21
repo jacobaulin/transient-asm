@@ -305,6 +305,6 @@ impl Codegen {
             0
         };
 
-        src1_flag + (src2_flag >> 1) + (dst_flag >> 2)
+        src1_flag + (src2_flag << 1) + (dst_flag << 2)
     }
 }
