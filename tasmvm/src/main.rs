@@ -306,10 +306,10 @@ impl TransientState {
             CNE => {
                 if source2_data == 0 {
                     // Zero
+                    self.call_stack.push(self.program_counter + 8);
                     source1_address
                 } else {
                     // Nonzero
-                    self.call_stack.push(self.program_counter + 8);
                     self.program_counter + 8
                 }
             }
