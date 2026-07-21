@@ -1,0 +1,5 @@
+#in_folder
+putc 10
+putc 71
+putc 10
+hlt

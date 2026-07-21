@@ -1,0 +1,6 @@
+jmp #lib1_jmp
+*lib lib1.tasm
+#next
+*lib ./library_in_folder/lib_in_folder.tasm
+jmp #in_folder
+*lib lib2.tasm
