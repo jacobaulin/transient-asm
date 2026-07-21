@@ -4,3 +4,7 @@ version = "0.2.0"
 edition = "2024"
 
 [dependencies]
+
+[[bin]]
+name = "tasmvm"
+path = "src/main.rs"
