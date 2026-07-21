@@ -1,12 +1,12 @@
-// Initialize values
-set64 $num1 0
-set64 $num2 1
-set64 $sum 1
+// initiera värden.
+set num1 0
+set num2 1
+set sum 1
 
 #loop
-puti64 $sum
-putc8 !8_10
-add64 $num1 $num2 $sum
-mov64 $num2 $num1
-mov64 $sum $num2
-jmp64 #loop
+puti sum
+putc 10 // ny rad.
+add num1 num2 sum
+mov num2 num1
+mov sum num2
+jmp #loop
