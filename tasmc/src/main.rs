@@ -25,8 +25,9 @@ impl Flags {
     }
 }
 
-fn parse_arguments(args: &Vec<String>) -> (String, Flags) {
+fn parse_arguments(args: &Vec<String>) -> (String, String, Flags) {
     let mut source_path = String::new();
+    let mut bytecode_path = String::new();
     let mut flags = Flags::defaults();
     for arg in args {
         if let Some(i) = arg.find("--") && i == 0 {
@@ -34,25 +35,34 @@ fn parse_arguments(args: &Vec<String>) -> (String, Flags) {
                 "dump-internal" => flags.dump_internal = true,
                 _ => panic!("okänd kompilatorflagga."),
             }
-        } else if source_path.is_empty() {
+        } else if arg.contains(".tasm") {
+            if !source_path.is_empty() {
+                panic!("mer än en källfil uppgavs.");
+            }
             source_path = arg.clone();
-        } else {
-            panic!("mer än en källfil uppgavs.");
+        } else if arg.contains(".tbc") {
+            if !bytecode_path.is_empty() {
+                panic!("mer än en utdatafil  uppgavs.");
+            }
+            bytecode_path = arg.clone();
         }
     }
 
-    (source_path, flags)
+    (source_path, bytecode_path, flags)
 }
 
 fn main() -> Result<(), ()> {
     let args: Vec<String> = env::args().skip(1).collect();
 
-    let (source_path, flags) = parse_arguments(&args);
+    let (source_path, bytecode_path, flags) = parse_arguments(&args);
 
     let source_path: PathBuf =
         fs::canonicalize(source_path).expect("lyckades inte normalisera källfil");
-
-    let bytecode_path: String = args.get(2).unwrap_or(&"./out.tbc".to_owned()).clone();
+    let bytecode_path: PathBuf = if !bytecode_path.is_empty() {
+        bytecode_path.into()
+    } else {
+        "./out.tbc".into()
+    };
 
     let sources: Vec<Source> = import_library(&source_path, None, &flags);
 
