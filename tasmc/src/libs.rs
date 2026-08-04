@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 use crate::lexer::Lexer;
 use crate::parser::{AST, Parser};
+use crate::Flags;
 
 #[derive(Clone, Debug)]
 pub struct Source {
@@ -10,7 +11,7 @@ pub struct Source {
     pub ast: AST,
 }
 
-pub fn import_library(path: &Path, state: Option<&Vec<Source>>) -> Vec<Source> {
+pub fn import_library(path: &Path, state: Option<&Vec<Source>>, flags: &Flags) -> Vec<Source> {
     // scan state to prevent library link duplication and/or recursion.
     if let Some(state) = state {
         for source in state {
@@ -24,16 +25,25 @@ pub fn import_library(path: &Path, state: Option<&Vec<Source>>) -> Vec<Source> {
         &path.file_name().unwrap()
     );
     let src = fs::read_to_string(&path).expect("felaktig bibliotekssökväg!");
+    if flags.dump_internal {
+        dbg!(&src);
+    }
 
     let mut lexer = Lexer::new(&src);
     let tokens = lexer
         .lex()
         .expect("fel: lexikografisk analys misslyckades.");
+    if flags.dump_internal {
+        dbg!(&tokens);
+    }
 
     let mut parser = Parser::new(tokens.clone());
     let ast: AST = parser
         .parse()
         .expect("fel: syntaktisk analys misslyckades.");
+    if flags.dump_internal {
+        dbg!(&ast);
+    }
 
     let mut sources: Vec<Source> = vec![Source {
         path: PathBuf::from(&path),
@@ -51,7 +61,7 @@ pub fn import_library(path: &Path, state: Option<&Vec<Source>>) -> Vec<Source> {
         }
 
         sources.extend(
-            import_library(&lib_path, Some(&child_state))
+            import_library(&lib_path, Some(&child_state), flags)
                 .iter()
                 .cloned(),
         );
