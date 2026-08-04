@@ -1,6 +1,6 @@
 // List management library for dynamic size lists
 
-*lib ./stlib/memory.tasm
+*lib ./memory.tasm
 //*lib memory.tasm
 
 set dyll_arg1
