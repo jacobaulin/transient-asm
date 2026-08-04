@@ -1,4 +1,4 @@
-*lib ./stlib/dynamic_linked_list.tasm
+*lib ./dynamic_linked_list.tasm
 
 set lista 6
 
