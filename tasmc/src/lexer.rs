@@ -49,16 +49,9 @@ impl Lexer {
             } else if char_read.is_whitespace() {
                 while let Some(c) = self.peek()
                     && c.is_whitespace()
+                    && c != '\n'
                 {
-                    match self.advance() {
-                        Some(_) => (),
-                        None => return Ok(Token::EOF),
-                    };
-                    if let Some(x) = self.peek()
-                        && !x.is_whitespace()
-                    {
-                        break;
-                    }
+                    self.advance();
                 }
                 self.lex_token()
             } else if char_read == '/' && self.peek().is_some() && self.peek().unwrap() == '/' {
