@@ -6,7 +6,7 @@ cal #dyll_initialize_list
 mov dyll_ret1 lista
 puti lista
 putc 10
-//hlt
+
 mov lista dyll_arg1
 mov 5 dyll_arg2
 cal #dyll_add_element

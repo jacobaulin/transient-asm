@@ -39,12 +39,11 @@ ret
 cal #_count_elements
 ret
 
-// Dosnt work and i dont know why
 // Remove element from list
-// Attention: This is a memory leak. You wont get back the unused memory automaticaly
+// Attention: The part of memory used wont be returned, it will be permanently lost unless you keep track of it yourself. 
 // arg1: Listptr arg2: Position
 #dyll_delete_element
-#_delete_element
+cal #_delete_element
 ret
 
 
