@@ -1,28 +1,157 @@
-// Memory management library
+// A free-list memmory allocator for transient assembly
 
-// Get next free space in memory
-// arg1: size (x8), ret1: memory_position
+
+// Allocate memory of specified size
+// arg1: size x8, ret1: first position
 #mem_allocate
-cal #_allocate
+	cal #_allocate
 ret
 
-
-
-#_initialize
-set _map_ptr
-imz _map_ptr
+// Return memmory at specified addres and forward a specified length
+// arg1: addres arg2: length
+#mem_retrurn
+	cal #_mem_return
 ret
-
-#_allocate
-cne #_initialize _map_ptr
-mov _map_ptr mem_ret1
-set _map_offset
-mov mem_arg1 _map_offset
-mul 8 _map_offset _map_offset
-add _map_offset _map_ptr _map_ptr
-ret
-
 
 
 set mem_arg1
+set mem_arg2
 set mem_ret1
+
+
+#_initialize
+	set _map_ptr
+	imz _map_ptr
+ret
+
+#_allocate
+	cne #_initialize _map_ptr
+	jie #_allocate_cache _cache_base_ptr
+	#_allocate_insufficient_cache
+	jie #_non_perfekt_use _non_perfekt_addres
+	mov _map_ptr mem_ret1
+	set _map_offset
+	mul 8 mem_arg1 _map_offset
+	add _map_offset _map_ptr _map_ptr
+ret
+
+#_allocate_cache
+	mov _cache_base_ptr _ptr
+	set _last_addres
+	mov 0 _last_addres
+	set _non_perfekt_addres
+	mov 0 _non_perfekt_addres
+	#_allocate_loop
+		mov 0 _enough
+		cal #_seperate_element
+		equ _length mem_arg1 _enough
+		set _enough
+		jie #_perfekt_find _enough
+		cgt _length mem_arg1 _enough
+		cie #_non_perfekt _enough
+		jne #_allocate_insufficient_cache _addres
+		mov _ptr _last_addres
+		mov _addres _ptr
+		jmp #_allocate_loop
+
+#_perfekt_find
+	cal #_seperate_element
+	mov _addres _new_addres
+	mov _ptr mem_ret1
+	mov _last_addres _ptr
+	cal #_seperate_element
+	mov _new_addres _addres
+	cal #_combine_element
+	mov _combined >_ptr
+ret
+
+#_non_perfekt
+	jie #_already_found _non_perfekt_addres
+	mov _ptr _non_perfekt_addres
+	set _non_perfekt_addres_last
+	mov _last_addres _non_perfekt_addres_last
+ret
+
+#_already_found
+ret
+
+#_non_perfekt_use
+	mov _non_perfekt_addres _ptr
+	cal #_seperate_element
+	mov 0 >_ptr
+	sub _length mem_arg2 _length
+	set _new_addres
+	mul 8 mem_arg2 _new_addres
+	add mem_arg1 _new_addres _addres
+	mov _addres _new_addres
+	cal #_combine_element
+	mov _combined >_addres
+	mov _non_perfekt_addres_last _ptr
+	cal #_seperate_element
+	mov _new_addres _addres
+	cal #_combine_element
+	mov _combined >_non_perfekt_addres_last
+	mov _non_perfekt_addres mem_ret1
+ret
+
+#_mem_return
+	jie #_return_cache _cache_base_ptr
+	mov mem_arg2 >mem_arg1
+	mov mem_arg1 _cache_base_ptr
+
+
+#_return_cache
+	set _ptr
+	mov _cache_base_ptr _ptr
+	#_return_cache_loop
+		cal #_seperate_element
+		jne #_return_cache_done _next_addres
+		mov _next_addres _ptr
+		jmp #_return_cache_loop
+	#_return_cache_done
+		set _addres
+		mov mem_arg1 _addres
+		cal #_combine_element
+		mov _combined >_ptr
+		mov mem_arg2 >mem_arg1
+		sub mem_arg2 1 _length
+		add 8 mem_arg1 _ptr
+		jmp #_return_cleanup
+		#_cleanup_done
+ret
+
+
+#_seperate_element
+	set _seperate_ptr
+	add 4 _map_ptr _seperate_ptr
+	add 4 _seperate_ptr _seperate_ptr_4
+	add 4 _seperate_ptr_4 _seperate_ptr_8
+	set _seperate_ptr_4
+	set _seperate_ptr_8
+	mov >_ptr >_seperate_ptr
+	mov >_seperate_ptr_4 >_seperate_ptr_8
+	set _next_addres
+	set _length
+	mov >_map_ptr _next_addres
+	mov >_seperate_ptr_4 _length
+	mov 0 >_map_ptr
+	mov 0 >_seperate_ptr_4
+ret
+
+#_combine_element
+	add 4 _map_ptr _combine_ptr
+	set _combine_ptr
+	mov _length >_combine_ptr
+	mov _addres >_map_ptr
+	mov >_map_ptr _combined
+	set _combined
+	mov 0 >_map_ptr
+	mov 0 >_combine_ptr
+ret
+
+#_return_cleanup
+	jne #_cleanup_done _length
+	sub _length 1 _length
+	mov 0 >_ptr
+	add 8 _ptr _ptr
+	jmp #_return_cleanup
