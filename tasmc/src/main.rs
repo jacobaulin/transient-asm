@@ -1,5 +1,4 @@
 use std::path::PathBuf;
-use std::process::exit;
 use std::{env, fs};
 
 use crate::codegen::Codegen;
@@ -41,14 +40,14 @@ fn parse_arguments(args: &Vec<String>) -> (String, String, Flags) {
                 "dump-internal" => flags.dump_internal = true,
                 _ => {
                     user_fatal!(
-                        "fel: okänd kompilatorflagga vid namn `{}`",
+                        "okänd kompilatorflagga vid namn `{}`",
                         &arg[2..]
                     );
                 }
             }
         } else if arg.contains(".tasm") {
             if !source_path.is_empty() {
-                user_fatal!("fel: mer än en källfil uppgavs (`{}`)", &arg);
+                user_fatal!("mer än en källfil uppgavs (`{}`)", &arg);
             }
             source_path = arg.clone();
         } else if arg.contains(".tbc") {
@@ -67,7 +66,7 @@ fn main() {
     let (source_path, bytecode_path, flags) = parse_arguments(&args);
 
     if source_path.is_empty() {
-        user_fatal!("fel: ingen källfil angavs");
+        user_fatal!("ingen källfil angavs");
     }
 
     let source_path: PathBuf =
