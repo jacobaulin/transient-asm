@@ -105,24 +105,32 @@ impl TransientState {
         self.memory[base..][..8].try_into().unwrap()
     }
     /// If ptr_mode is 1, a redirected write will execute through the address at the given address
-    pub fn memory_write(&mut self, address: usize, data: &[u8], ptr_mode: usize) {
+    pub fn memory_write(
+        &mut self,
+        address: usize,
+        data: &[u8],
+        ptr_mode: usize,
+    ) {
         assert!(
             self.memory.len() > address + 8,
             "Halt: Attempted memory write beyond memory scope"
         );
         if ptr_mode == 1 {
             let fetch_stage_1 = &self.memory[address..][..8];
-            let ptr_address = u64::from_be_bytes(u64_pad_be(&fetch_stage_1)) as usize;
+            let ptr_address =
+                u64::from_be_bytes(u64_pad_be(&fetch_stage_1)) as usize;
             if self.memory.len() < ptr_address + 8 {
                 panic!(
                     "Halt: Attempted pointer write beyond memory space! Pointer at {} attempted to write at {}.\n-> Program Counter: {}, Transient Memory:\n{:?}",
                     address, ptr_address, self.program_counter, self.memory
                 );
             }
-            self.memory[ptr_address..][..8].copy_from_slice(&data[data.len() - 8..][..8]);
+            self.memory[ptr_address..][..8]
+                .copy_from_slice(&data[data.len() - 8..][..8]);
             return;
         }
-        self.memory[address..][..8].copy_from_slice(&data[data.len() - 8..][..8]);
+        self.memory[address..][..8]
+            .copy_from_slice(&data[data.len() - 8..][..8]);
     }
     pub fn memory_read(&mut self, address: usize, ptr_mode: usize) -> &[u8] {
         assert!(
@@ -131,7 +139,8 @@ impl TransientState {
         );
         let fetch_stage_1 = &self.memory[address..][..8];
         if ptr_mode == 1 {
-            let ptr_address = u64::from_be_bytes(u64_pad_be(&fetch_stage_1)) as usize;
+            let ptr_address =
+                u64::from_be_bytes(u64_pad_be(&fetch_stage_1)) as usize;
             if self.memory.len() < ptr_address + 8 {
                 panic!(
                     "Halt: Attempted pointer read beyond memory space! Pointer at {} attempted to write at {}.\n-> Program Counter: {}, Transient Memory:\n{:?}",
@@ -151,9 +160,12 @@ impl TransientState {
         let src1_ptr = (ptr_mode & 1) / 1;
         let src2_ptr = (ptr_mode & 2) / 2;
         let dest_ptr = (ptr_mode & 4) / 4;
-        let source1_address = u16::from_be_bytes([instruction[2], instruction[3]]) as usize;
-        let source2_address = u16::from_be_bytes([instruction[4], instruction[5]]) as usize;
-        let destination_address = u16::from_be_bytes([instruction[6], instruction[7]]) as usize;
+        let source1_address =
+            u16::from_be_bytes([instruction[2], instruction[3]]) as usize;
+        let source2_address =
+            u16::from_be_bytes([instruction[4], instruction[5]]) as usize;
+        let destination_address =
+            u16::from_be_bytes([instruction[6], instruction[7]]) as usize;
 
         let source1_data: &[u8] = self.memory_read(source1_address, src1_ptr);
         let source1_data: u64 = u64::from_be_bytes(u64_pad_be(source1_data));
@@ -163,7 +175,11 @@ impl TransientState {
 
         match opcode {
             MOV => {
-                self.memory_write(destination_address, &source1_data.to_be_bytes(), dest_ptr);
+                self.memory_write(
+                    destination_address,
+                    &source1_data.to_be_bytes(),
+                    dest_ptr,
+                );
                 self.program_counter + 8
             }
             ADD => {
@@ -213,7 +229,8 @@ impl TransientState {
             DIV_R => {
                 self.memory_write(
                     destination_address,
-                    &((source1_data as f64 / source2_data as f64) as u64).to_be_bytes(),
+                    &((source1_data as f64 / source2_data as f64) as u64)
+                        .to_be_bytes(),
                     dest_ptr,
                 );
                 self.program_counter + 8
