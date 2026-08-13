@@ -1,9 +1,16 @@
-use crate::lexer::Token;
+use crate::errors::{ErrorData, IndexReference, error};
+use crate::lexer::{Token, TokenData};
 
 #[derive(Debug, Clone)]
 pub struct AST {
-    pub libraries: Vec<String>,
+    pub libraries: Vec<ASTLibraryLink>,
     pub instructions: Vec<ASTInstruction>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ASTLibraryLink {
+    pub path: String,
+    pub reference: IndexReference,
 }
 
 impl AST {
@@ -16,13 +23,31 @@ impl AST {
 }
 
 #[derive(Debug, Clone)]
-pub enum ASTInstruction {
+pub enum ASTInstructionData {
     VMStep(ASTOpcode, Vec<ASTArgument>),
     Tag(String), // identifier
 }
 
 #[derive(Debug, Clone)]
-pub enum ASTArgument {
+pub struct ASTInstruction {
+    pub inner: ASTInstructionData,
+    pub reference: IndexReference,
+}
+
+impl ASTInstruction {
+    pub fn new(inner: ASTInstructionData, reference: IndexReference) -> Self {
+        Self { inner, reference }
+    }
+}
+
+macro_rules! ast_instruction {
+    ($name:ident $(($($data:expr),*))?, $reference:expr) => {
+        ASTInstruction::new(ASTInstructionData::$name $(($($data),*))?, $reference)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum ASTArgumentData {
     Variable(String), // identifier
     Pointer(String),  // identifier
     Address(String),  // identifier
@@ -31,7 +56,25 @@ pub enum ASTArgument {
 }
 
 #[derive(Debug, Clone)]
-pub enum ASTOpcode {
+pub struct ASTArgument {
+    pub inner: ASTArgumentData,
+    pub reference: IndexReference,
+}
+
+impl ASTArgument {
+    pub fn new(inner: ASTArgumentData, reference: IndexReference) -> Self {
+        Self { inner, reference }
+    }
+}
+
+macro_rules! ast_argument {
+    ($name:ident $(($($data:expr),*))?, $reference:expr) => {
+        ASTArgument::new(ASTArgumentData::$name $(($($data),*))?, $reference)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum ASTOpcodeData {
     Mov,
     Add,
     Sub,
@@ -54,6 +97,24 @@ pub enum ASTOpcode {
     Ret,
     Hlt,
     Set,
+}
+
+#[derive(Clone, Debug)]
+pub struct ASTOpcode {
+    pub inner: ASTOpcodeData,
+    pub reference: IndexReference,
+}
+
+impl ASTOpcode {
+    pub fn new(inner: ASTOpcodeData, reference: IndexReference) -> Self {
+        Self { inner, reference }
+    }
+}
+
+macro_rules! ast_opcode {
+    ($name:ident $(($($data:expr),*))?, $reference:expr) => {
+        ASTOpcode::new(ASTOpcodeData::$name $(($($data),*))?, $reference)
+    }
 }
 
 pub struct Parser {
@@ -80,163 +141,250 @@ impl Parser {
             Some(self.tokens[self.index].clone())
         }
     }
-    fn parse_argument(&mut self) -> Result<ASTArgument, ()> {
-        if let Some(token) = self.advance() {
-            match token {
-                Token::Immediate(x) => Ok(ASTArgument::Immediate(x)),
-                Token::Identifier(x) => Ok(ASTArgument::Variable(x)),
-                Token::RAngleBracket => {
-                    if let Some(token) = self.advance()
-                        && let Token::Identifier(x) = token
-                    {
-                        Ok(ASTArgument::Pointer(x))
-                    } else {
-                        eprintln!("! en pekare måste följas av en identifierare");
-                        Err(())
-                    }
+    fn previous(&self) -> Token {
+        self.tokens[self.index - 1].clone()
+    }
+    fn synchronise_lossy(&mut self) {
+        while self.peek().is_some() {
+            match self.peek() {
+                Some(Token {
+                    inner: TokenData::Newline,
+                    ..
+                }) => {
+                    self.advance();
+                    break;
                 }
-                Token::Ampersand => {
-                    if let Some(token) = self.advance()
-                        && let Token::Identifier(x) = token
-                    {
-                        Ok(ASTArgument::Address(x))
-                    } else {
-                        eprintln!("! en address måste följas av en identifierare");
-                        Err(())
-                    }
+                Some(_) => {
+                    self.advance();
                 }
-                Token::Hashtag => {
-                    if let Some(token) = self.advance()
-                        && let Token::Identifier(x) = token
-                    {
-                        Ok(ASTArgument::Tag(x))
-                    } else {
-                        eprintln!("! en tagg måste följas av en identifierare");
-                        Err(())
-                    }
-                }
-                _ => {
-                    eprintln!("! ogiltigt argument upptäcktes");
-                    Err(())
-                }
+                None => (),
             }
-        } else {
-            eprintln!("! ett argument förväntades");
-            Err(())
         }
     }
-    pub fn parse(&mut self) -> Result<AST, ()> {
+    fn parse_argument(
+        &mut self,
+        opcode_reference: &IndexReference,
+    ) -> Result<ASTArgument, ErrorData> {
+        if let Some(token) = self.advance() {
+            match token.inner {
+                TokenData::Immediate(x) => {
+                    Ok(ast_argument!(Immediate(x), token.reference))
+                }
+                TokenData::Identifier(x) => {
+                    Ok(ast_argument!(Variable(x), token.reference))
+                }
+                TokenData::RAngleBracket => {
+                    if let Some(token) = self.advance()
+                        && let TokenData::Identifier(x) = token.inner
+                    {
+                        Ok(ast_argument!(Pointer(x), token.reference))
+                    } else {
+                        Err(error!(MissingPointerIdentifier, token.reference))
+                    }
+                }
+                TokenData::Ampersand => {
+                    if let Some(token) = self.advance()
+                        && let TokenData::Identifier(x) = token.inner
+                    {
+                        Ok(ast_argument!(Address(x), token.reference))
+                    } else {
+                        Err(error!(MissingAddressIdentifier, token.reference))
+                    }
+                }
+                TokenData::Hashtag => {
+                    if let Some(token) = self.advance()
+                        && let TokenData::Identifier(x) = token.inner
+                    {
+                        Ok(ast_argument!(Tag(x), token.reference))
+                    } else {
+                        Err(error!(MissingTagIdentifier, token.reference))
+                    }
+                }
+                _ => Err(error!(InvalidArgumentSymbol, token.reference)),
+            }
+        } else {
+            Err(error!(ArgumentExpected, opcode_reference.clone()))
+        }
+    }
+    pub fn parse(&mut self) -> Result<AST, Vec<ErrorData>> {
         let mut ast: AST = AST::new();
+        let mut error_data: Vec<ErrorData> = vec![];
         loop {
             if let Some(token) = self.advance() {
-                match token {
-                    Token::Newline => (),
-                    Token::EOF => break Ok(ast),
-                    Token::Hashtag => {
+                match token.inner {
+                    TokenData::Newline => (),
+                    TokenData::EOF => {
+                        if error_data.is_empty() {
+                            break Ok(ast);
+                        } else {
+                            break Err(error_data);
+                        }
+                    }
+                    TokenData::Hashtag => {
                         let identifier = self.advance();
                         if let None = identifier {
-                            eprintln!("! `#` måste följas av en giltig identifierare");
-                            break Err(());
+                            error_data.push(error!(
+                                MissingTagIdentifier,
+                                token.reference
+                            ));
+                            self.synchronise_lossy();
+                            continue;
                         }
-                        match identifier.unwrap() {
-                            Token::Identifier(x) => ast.instructions.push(ASTInstruction::Tag(x)),
+                        match identifier.clone().unwrap().inner {
+                            TokenData::Identifier(x) => {
+                                ast.instructions.push(ast_instruction!(
+                                    Tag(x),
+                                    identifier.unwrap().reference
+                                ));
+                            }
                             _ => {
-                                eprintln!("! `#` måste följas av en giltig identifierare");
-                                break Err(());
+                                error_data.push(error!(
+                                    MissingTagIdentifier,
+                                    token.reference
+                                ));
+                                self.synchronise_lossy();
+                                continue;
+                            }
+                        }
+
+                        let newline = self
+                            .advance()
+                            .expect("oväntat slut på lexikografisk data under syntaxanalys"); // todo:
+                        // tänk igenom mer ordentligt
+                        if let TokenData::Newline = newline.inner {
+                            continue;
+                        }
+                        error_data
+                            .push(error!(TrailingTagData, newline.reference));
+                        self.synchronise_lossy();
+                        continue;
+                    }
+                    TokenData::Lib => {
+                        let identifier = self.advance();
+                        if let None = identifier {
+                            error_data.push(error!(
+                                MissingLibraryIdentifier,
+                                token.reference
+                            ));
+                            self.synchronise_lossy();
+                            continue;
+                        }
+                        let identifier = identifier.unwrap();
+                        match identifier.inner {
+                            TokenData::Identifier(path) => {
+                                ast.libraries.push(ASTLibraryLink {
+                                    path,
+                                    reference: identifier.reference,
+                                })
+                            }
+                            _ => {
+                                error_data.push(error!(
+                                    MissingLibraryIdentifier,
+                                    token.reference
+                                ));
+                                self.synchronise_lossy();
+                                continue;
                             }
                         }
 
                         let newline = self
                             .advance()
                             .expect("oväntat slut på lexikografisk data under syntaxanalys");
-                        if let Token::Newline = newline {
+                        if let TokenData::Newline = newline.inner {
                             continue;
                         }
-                        eprintln!("! överflödiga data påträffat efter `#`");
-                        break Err(());
+                        error_data.push(error!(
+                            TrailingLibraryData,
+                            newline.reference
+                        ));
+                        self.synchronise_lossy();
+                        continue;
                     }
-                    Token::Lib => {
-                        let identifier = self.advance();
-                        if let None = identifier {
-                            eprintln!("! bibliotekslänkar måste följas av en giltig identifierare");
-                            break Err(());
-                        }
-                        match identifier.unwrap() {
-                            Token::Identifier(x) => ast.libraries.push(x),
-                            _ => {
-                                eprintln!(
-                                    "! bibliotekslänkar måste följas av en giltig identifierare"
-                                );
-                                break Err(());
-                            }
-                        }
-
-                        let newline = self
-                            .advance()
-                            .expect("oväntat slut på lexikografisk data under syntaxanalys");
-                        if let Token::Newline = newline {
-                            continue;
-                        }
-                        eprintln!("! överflödiga data påträffat efter bibliotekslänk");
-                        break Err(());
-                    }
-                    Token::Identifier(x) => {
+                    TokenData::Identifier(x) => {
                         let opcode: ASTOpcode = match x.as_str() {
-                            "mov" => ASTOpcode::Mov,
-                            "add" => ASTOpcode::Add,
-                            "sub" => ASTOpcode::Sub,
-                            "mul" => ASTOpcode::Mul,
-                            "divt" => ASTOpcode::Divt,
-                            "divr" => ASTOpcode::Divr,
-                            "rem" => ASTOpcode::Rem,
-                            "cgt" => ASTOpcode::Cgt,
-                            "clt" => ASTOpcode::Clt,
-                            "jmp" => ASTOpcode::Jmp,
-                            "jie" => ASTOpcode::Jie,
-                            "jne" => ASTOpcode::Jne,
-                            "puti" => ASTOpcode::Puti,
-                            "putc" => ASTOpcode::Putc,
-                            "imz" => ASTOpcode::Imz,
-                            "equ" => ASTOpcode::Equ,
-                            "cal" => ASTOpcode::Cal,
-                            "cie" => ASTOpcode::Cie,
-                            "cne" => ASTOpcode::Cne,
-                            "ret" => ASTOpcode::Ret,
-                            "hlt" => ASTOpcode::Hlt,
-                            "set" => ASTOpcode::Set,
+                            "mov" => ast_opcode!(Mov, token.reference.clone()),
+                            "add" => ast_opcode!(Add, token.reference.clone()),
+                            "sub" => ast_opcode!(Sub, token.reference.clone()),
+                            "mul" => ast_opcode!(Mul, token.reference.clone()),
+                            "divt" => {
+                                ast_opcode!(Divt, token.reference.clone())
+                            }
+                            "divr" => {
+                                ast_opcode!(Divr, token.reference.clone())
+                            }
+                            "rem" => ast_opcode!(Rem, token.reference.clone()),
+                            "cgt" => ast_opcode!(Cgt, token.reference.clone()),
+                            "clt" => ast_opcode!(Clt, token.reference.clone()),
+                            "jmp" => ast_opcode!(Jmp, token.reference.clone()),
+                            "jie" => ast_opcode!(Jie, token.reference.clone()),
+                            "jne" => ast_opcode!(Jne, token.reference.clone()),
+                            "puti" => {
+                                ast_opcode!(Puti, token.reference.clone())
+                            }
+                            "putc" => {
+                                ast_opcode!(Putc, token.reference.clone())
+                            }
+                            "imz" => ast_opcode!(Imz, token.reference.clone()),
+                            "equ" => ast_opcode!(Equ, token.reference.clone()),
+                            "cal" => ast_opcode!(Cal, token.reference.clone()),
+                            "cie" => ast_opcode!(Cie, token.reference.clone()),
+                            "cne" => ast_opcode!(Cne, token.reference.clone()),
+                            "ret" => ast_opcode!(Ret, token.reference.clone()),
+                            "hlt" => ast_opcode!(Hlt, token.reference.clone()),
+                            "set" => ast_opcode!(Set, token.reference.clone()),
                             _ => {
-                                eprintln!("! ogiltig operationskod `{}`", x);
-                                break Err(());
+                                error_data.push(error!(
+                                    InvalidOpcode,
+                                    token.reference.clone(),
+                                    x.clone()
+                                ));
+                                self.synchronise_lossy();
+                                continue;
                             }
                         };
                         let mut args: Vec<ASTArgument> = vec![];
                         loop {
-                            let peek = self.peek().expect("");
-                            match peek {
-                                Token::EOF => {
+                            let peek = self.peek().expect(""); // todo: what is going on here?
+                            match peek.inner {
+                                TokenData::EOF => {
                                     self.advance();
                                     break;
                                 }
-                                Token::Newline => {
+                                TokenData::Newline => {
                                     self.advance();
                                     break;
                                 }
                                 _ => (),
                             }
-                            args.push(self.parse_argument()?);
+                            match self.parse_argument(&opcode.reference) {
+                                Ok(x) => args.push(x),
+                                Err(x) => {
+                                    error_data.push(x);
+                                    self.synchronise_lossy();
+                                    continue;
+                                }
+                            }
                         }
-                        ast.instructions.push(ASTInstruction::VMStep(opcode, args));
+                        ast.instructions.push(ast_instruction!(
+                            VMStep(opcode, args),
+                            token.reference
+                        ));
                     }
                     _ => {
-                        eprintln!(
-                            "! felaktiga data påträffat. tasmc stödjer enbart instruktioner och taggar"
-                        );
-                        break Err(());
+                        error_data.push(error!(
+                            InvalidStatement,
+                            token.reference.clone()
+                        ));
+                        self.synchronise_lossy();
+                        continue;
                     }
                 }
             } else {
-                eprintln!("! ogiltigt slut på källfilen");
-                break Err(());
+                error_data.push(error!(
+                    UnexpectedSymbolTermination,
+                    self.previous().reference.clone()
+                ));
+                return Err(error_data);
             }
         }
     }

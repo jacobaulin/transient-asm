@@ -1,4 +1,7 @@
-use crate::lir::{LIR, LIRArgument, LIRData, LIRInstruction, LIRLabel, LIRPtrMode, LIRTag};
+use crate::lir::{
+    LIR, LIRArgument, LIRData, LIRInstruction, LIRLabel, LIRPtrMode, LIRTag,
+};
+use crate::errors::internal_fatal;
 use std::collections::HashMap;
 
 const BYTES_PER_INSTRUCTION: usize = 8;
@@ -51,7 +54,8 @@ impl<'a> From<LIR<'a>> for Codegen {
 }
 
 impl Codegen {
-    /* The current bytecode format assumes the following:
+    /*
+     * The current bytecode format assumes the following:
      * - Every instruction is 8 bytes.
      * - The (initial) text section starts at offset 0x00.
      * - Text may be present anywhere in the image.
@@ -99,12 +103,14 @@ impl Codegen {
 
         assert_eq!(
             bytecode.len(),
-            self.memory_metadata.mem_size_text + self.memory_metadata.mem_size_data
+            self.memory_metadata.mem_size_text
+                + self.memory_metadata.mem_size_data
         );
         bytecode
     }
 
-    /* todo: this is slow. iterating over all labels
+    /*
+     * todo: this is slow. iterating over all labels
      * is unnecessary and ideally another map of labels
      * to their indexes in the memory vector is a lot
      * more efficient.
@@ -113,15 +119,16 @@ impl Codegen {
         for index in 0..self.labels.len() {
             let (id, _) = self.labels[index];
             if id == label {
-                return (self.memory_metadata.mem_offset_data + index * BYTES_PER_DATA)
+                return (self.memory_metadata.mem_offset_data
+                    + index * BYTES_PER_DATA)
                     .try_into()
                     .expect("minnesadresser överstiger maxvärdet");
             }
         }
-        panic!("absolute address label lookup yielded no results");
+        internal_fatal!("kunde inte hitta variabeletikett vid adressberäkning");
     }
     fn get_absolute_address_tag(&self, tag: &LIRTag) -> u16 {
-        let index = self.tags.get(&tag).expect("could not find memory tag");
+        let index = self.tags.get(&tag).expect("kunde inte hitta taggetikett vid adressberäkning");
         (self.memory_metadata.mem_offset_text + index * BYTES_PER_INSTRUCTION)
             .try_into()
             .expect("minnesadresser överstiger maxvärdet")
@@ -150,7 +157,8 @@ impl Codegen {
             LIRInstruction::Ret => 0x14,
             LIRInstruction::Hlt => 0xFF,
         };
-        let (ptr_data, src1, src2, dst): (u8, u16, u16, u16) = match instruction {
+        let (ptr_data, src1, src2, dst): (u8, u16, u16, u16) = match instruction
+        {
             LIRInstruction::Mov(src1, dst) => (
                 Self::make_pointer_data(Some(src1), None, Some(dst)),
                 self.get_absolute_address_label(src1.label),
@@ -205,7 +213,9 @@ impl Codegen {
                 self.get_absolute_address_label(src2.label),
                 self.get_absolute_address_label(dst.label),
             ),
-            LIRInstruction::Jmp(tag) => (0x00, self.get_absolute_address_tag(tag), 0x00, 0x00),
+            LIRInstruction::Jmp(tag) => {
+                (0x00, self.get_absolute_address_tag(tag), 0x00, 0x00)
+            }
             LIRInstruction::Jie(tag, src2) => (
                 Self::make_pointer_data(None, Some(src2), None),
                 self.get_absolute_address_tag(tag),
@@ -242,7 +252,9 @@ impl Codegen {
                 self.get_absolute_address_label(src2.label),
                 self.get_absolute_address_label(dst.label),
             ),
-            LIRInstruction::Cal(tag) => (0x00, self.get_absolute_address_tag(tag), 0x00, 0x00),
+            LIRInstruction::Cal(tag) => {
+                (0x00, self.get_absolute_address_tag(tag), 0x00, 0x00)
+            }
             LIRInstruction::Cie(tag, src2) => (
                 Self::make_pointer_data(None, Some(src2), None),
                 self.get_absolute_address_tag(tag),

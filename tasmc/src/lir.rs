@@ -1,14 +1,17 @@
+use crate::errors::{ErrorData, error, internal_fatal};
 use crate::libs::Source;
-use crate::namespaces::{IdentifierHash, IdentifierType, Namespaces};
-use crate::parser::{ASTArgument, ASTInstruction, ASTOpcode};
+use crate::namespaces::{IdentifierType, IdentifierUID, Namespaces};
+use crate::parser::{
+    ASTArgument, ASTArgumentData, ASTInstructionData, ASTOpcode, ASTOpcodeData,
+};
 use std::collections::HashMap;
-use std::path::Path;
 
 #[derive(Debug)]
 pub struct LIR<'a> {
     pub instructions: Vec<LIRInstruction>,
     pub labels: HashMap<LIRLabel, LIRData>, // <label, value>
     pub tags: HashMap<LIRTag, usize>,       // <label, index>
+
     immediate_handles: HashMap<u64, LIRLabel>, // <value, label>
     address_handles: HashMap<LIRLabel, LIRLabel>, // <underlying, immediate>
 
@@ -16,9 +19,9 @@ pub struct LIR<'a> {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-pub struct LIRLabel(pub IdentifierHash);
+pub struct LIRLabel(pub IdentifierUID);
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-pub struct LIRTag(pub IdentifierHash);
+pub struct LIRTag(pub IdentifierUID);
 
 #[derive(Clone, Debug)]
 pub struct LIRArgument {
@@ -73,53 +76,64 @@ macro_rules! count {
 }
 
 macro_rules! unpack_vmstep_inner {
-    ($lir:expr, $path:expr, $arg:expr, Arg) => {
-        $lir.resolve_argument($arg, $path)
+    ($lir:expr, $arg:expr, Arg) => {
+        $lir.resolve_argument($arg)
     };
-    ($lir:expr, $path:expr, $arg:expr, Tag) => {
-        $lir.resolve_tag($arg, $path)
+    ($lir:expr, $arg:expr, Tag) => {
+        $lir.resolve_tag($arg)
     };
 }
 
 macro_rules! unpack_vmstep {
-    ($lir:expr, $path:expr, $args:expr, $($type:ident),*) => {{
+    ($lir:expr, $opcode:expr, $args:expr, $($type:ident),*) => {{
         let mut args_iter = $args.iter();
-        assert_eq!(count!($($type),*), args_iter.len());
-        (
+        let expected_len = count!($($type),*);
+        if expected_len != args_iter.len() {
+            return Err(error!(
+                InvalidArgumentNumber,
+                $opcode.reference.clone(),
+                expected_len,
+                args_iter.len()
+            ))
+        }
+        Ok((
             $(
-                unpack_vmstep_inner!($lir, $path, args_iter.next().unwrap().clone(), $type),
+                unpack_vmstep_inner!($lir, args_iter.next().unwrap().clone(), $type),
             )*
-        )
+        ))
     }}
 }
 
 impl<'a> LIR<'a> {
     fn push_label(&mut self, label: LIRLabel, data: LIRData) {
         if self.labels.contains_key(&label) {
-            panic!("[internt fel] kollision mellan dataetiketter i l.i.r.");
+            internal_fatal!(
+                "kollision mellan dataetiketter i l.i.r., etikett {:?} finns redan",
+                label
+            );
         }
         self.labels.insert(label, data);
     }
-    fn resolve_address(&mut self, path: &Path, addr_label: LIRLabel) -> LIRArgument {
+    fn resolve_address(
+        &mut self,
+        addr_label: LIRLabel,
+    ) -> Result<LIRArgument, ErrorData> {
         if let Some(id) = self.address_handles.get(&addr_label) {
-            LIRArgument {
+            Ok(LIRArgument {
                 label: id.clone(),
                 ptr_mode: LIRPtrMode::Unset,
-            }
+            })
         } else {
-            // todo: also hacky.
-            let id = self
-                .namespaces
-                .hash_private(path, &format!("&{}", addr_label.0.0.to_string()));
+            let uid = self.namespaces.create_uid();
             assert!(self.labels.contains_key(&addr_label));
-            self.address_handles.insert(addr_label, LIRLabel(id));
-            assert!(!self.labels.contains_key(&LIRLabel(id)));
+            self.address_handles.insert(addr_label, LIRLabel(uid));
+            assert!(!self.labels.contains_key(&LIRLabel(uid)));
             self.labels
-                .insert(LIRLabel(id), LIRData::AddressOf(addr_label));
-            LIRArgument {
-                label: LIRLabel(id),
+                .insert(LIRLabel(uid), LIRData::AddressOf(addr_label));
+            Ok(LIRArgument {
+                label: LIRLabel(uid),
                 ptr_mode: LIRPtrMode::Unset,
-            }
+            })
         }
     }
     fn resolve_immediate(&mut self, value: u64) -> LIRArgument {
@@ -129,154 +143,202 @@ impl<'a> LIR<'a> {
                 ptr_mode: LIRPtrMode::Unset,
             }
         } else {
-            // todo: kind of a hack for now. hash_[] should accept all hashable data as key.
-            // or, a unique ID should be generated and stored in the immediate_handles.
-            let id = self.namespaces.hash_public(&value.to_string());
-            self.push_label(LIRLabel(id), LIRData::Constant(value));
-            self.immediate_handles.insert(value, LIRLabel(id));
+            let uid = self.namespaces.create_uid();
+            self.push_label(LIRLabel(uid), LIRData::Constant(value));
+            self.immediate_handles.insert(value, LIRLabel(uid));
             LIRArgument {
-                label: LIRLabel(id),
+                label: LIRLabel(uid),
                 ptr_mode: LIRPtrMode::Unset,
             }
         }
     }
-    fn resolve_argument(&mut self, ast_arg: ASTArgument, path: &Path) -> LIRArgument {
-        match ast_arg {
-            ASTArgument::Tag(_) => panic!("argument förväntades, men tagg hittades"),
-            ASTArgument::Variable(x) => {
-                let id = self
+    fn resolve_argument(
+        &mut self,
+        ast_arg: ASTArgument,
+    ) -> Result<LIRArgument, ErrorData> {
+        match ast_arg.inner {
+            ASTArgumentData::Tag(_) => Err(error!(
+                InvalidASTArgumentData,
+                ast_arg.reference.clone(),
+                "variabel".into(),
+                "".into()
+            )),
+            ASTArgumentData::Variable(x) => {
+                let ident = self
                     .namespaces
-                    .get_identifier(&x, Some(path))
-                    .expect("variabeln kunde ej hittas");
-                LIRArgument {
-                    label: LIRLabel(id.id),
+                    .resolve_identifier(&x, ast_arg.reference)?;
+                Ok(LIRArgument {
+                    label: LIRLabel(ident.uid),
                     ptr_mode: LIRPtrMode::Unset,
-                }
+                })
             }
-            ASTArgument::Pointer(x) => {
-                let id = self
+            ASTArgumentData::Pointer(x) => {
+                let ident = self
                     .namespaces
-                    .get_identifier(&x, Some(path))
-                    .expect("variabeln kunde ej hittas");
-                LIRArgument {
-                    label: LIRLabel(id.id),
+                    .resolve_identifier(&x, ast_arg.reference)?;
+                Ok(LIRArgument {
+                    label: LIRLabel(ident.uid),
                     ptr_mode: LIRPtrMode::Pointer,
-                }
+                })
             }
-            ASTArgument::Address(x) => {
+            ASTArgumentData::Address(x) => {
                 let addr_id = self
                     .namespaces
-                    .get_identifier(&x, Some(path))
-                    .expect("variabeln kunde ej hittas");
-                self.resolve_address(path, LIRLabel(addr_id.id))
+                    .resolve_identifier(&x, ast_arg.reference.clone())?;
+                self.resolve_address(LIRLabel(addr_id.uid))
             }
-            ASTArgument::Immediate(x) => self.resolve_immediate(x),
+            ASTArgumentData::Immediate(x) => Ok(self.resolve_immediate(x)),
         }
     }
-    fn resolve_tag(&mut self, ast_arg: ASTArgument, path: &Path) -> LIRTag {
-        match ast_arg {
-            ASTArgument::Tag(x) => {
+    fn resolve_tag(
+        &mut self,
+        ast_arg: ASTArgument,
+    ) -> Result<LIRTag, ErrorData> {
+        match ast_arg.inner {
+            ASTArgumentData::Tag(x) => {
                 let id = self
                     .namespaces
-                    .get_identifier(&x, Some(path))
-                    .expect("kunde ej hitta taggen");
-                LIRTag(id.id)
+                    .resolve_identifier(&x, ast_arg.reference)?;
+                Ok(LIRTag(id.uid))
             }
-            _ => panic!("tagg förväntades, men variabel hittades"),
+            _ => Err(error!(
+                InvalidASTArgumentData,
+                ast_arg.reference.clone(),
+                "tagg".into(),
+                "variabel".into()
+            )),
         }
     }
-    fn lower_instruction(&mut self, path: &Path, opcode: &ASTOpcode, args: &Vec<ASTArgument>) {
-        match opcode {
-            ASTOpcode::Set => (),
-            ASTOpcode::Mov => {
-                let (src1, dst) = unpack_vmstep!(self, path, args, Arg, Arg);
-                self.instructions.push(LIRInstruction::Mov(src1, dst));
+    fn lower_instruction(
+        &mut self,
+        opcode: &ASTOpcode,
+        args: &Vec<ASTArgument>,
+    ) -> Result<(), ErrorData> {
+        match opcode.inner {
+            ASTOpcodeData::Set => (),
+            ASTOpcodeData::Mov => {
+                let (src1, dst) = unpack_vmstep!(self, opcode, args, Arg, Arg)?;
+                self.instructions.push(LIRInstruction::Mov(src1?, dst?));
             }
-            ASTOpcode::Add => {
-                let (src1, src2, dst) = unpack_vmstep!(self, path, args, Arg, Arg, Arg);
-                self.instructions.push(LIRInstruction::Add(src1, src2, dst));
-            }
-            ASTOpcode::Sub => {
-                let (src1, src2, dst) = unpack_vmstep!(self, path, args, Arg, Arg, Arg);
-                self.instructions.push(LIRInstruction::Sub(src1, src2, dst));
-            }
-            ASTOpcode::Mul => {
-                let (src1, src2, dst) = unpack_vmstep!(self, path, args, Arg, Arg, Arg);
-                self.instructions.push(LIRInstruction::Mul(src1, src2, dst));
-            }
-            ASTOpcode::Divt => {
-                let (src1, src2, dst) = unpack_vmstep!(self, path, args, Arg, Arg, Arg);
+            ASTOpcodeData::Add => {
+                let (src1, src2, dst) =
+                    unpack_vmstep!(self, opcode, args, Arg, Arg, Arg)?;
                 self.instructions
-                    .push(LIRInstruction::Divt(src1, src2, dst));
+                    .push(LIRInstruction::Add(src1?, src2?, dst?));
             }
-            ASTOpcode::Divr => {
-                let (src1, src2, dst) = unpack_vmstep!(self, path, args, Arg, Arg, Arg);
+            ASTOpcodeData::Sub => {
+                let (src1, src2, dst) =
+                    unpack_vmstep!(self, opcode, args, Arg, Arg, Arg)?;
                 self.instructions
-                    .push(LIRInstruction::Divr(src1, src2, dst));
+                    .push(LIRInstruction::Sub(src1?, src2?, dst?));
             }
-            ASTOpcode::Rem => {
-                let (src1, src2, dst) = unpack_vmstep!(self, path, args, Arg, Arg, Arg);
-                self.instructions.push(LIRInstruction::Rem(src1, src2, dst));
+            ASTOpcodeData::Mul => {
+                let (src1, src2, dst) =
+                    unpack_vmstep!(self, opcode, args, Arg, Arg, Arg)?;
+                self.instructions
+                    .push(LIRInstruction::Mul(src1?, src2?, dst?));
             }
-            ASTOpcode::Cgt => {
-                let (src1, src2, dst) = unpack_vmstep!(self, path, args, Arg, Arg, Arg);
-                self.instructions.push(LIRInstruction::Cgt(src1, src2, dst));
+            ASTOpcodeData::Divt => {
+                let (src1, src2, dst) =
+                    unpack_vmstep!(self, opcode, args, Arg, Arg, Arg)?;
+                self.instructions
+                    .push(LIRInstruction::Divt(src1?, src2?, dst?));
             }
-            ASTOpcode::Clt => {
-                let (src1, src2, dst) = unpack_vmstep!(self, path, args, Arg, Arg, Arg);
-                self.instructions.push(LIRInstruction::Clt(src1, src2, dst));
+            ASTOpcodeData::Divr => {
+                let (src1, src2, dst) =
+                    unpack_vmstep!(self, opcode, args, Arg, Arg, Arg)?;
+                self.instructions
+                    .push(LIRInstruction::Divr(src1?, src2?, dst?));
             }
-            ASTOpcode::Jmp => {
-                let (tag,) = unpack_vmstep!(self, path, args, Tag);
-                self.instructions.push(LIRInstruction::Jmp(tag));
+            ASTOpcodeData::Rem => {
+                let (src1, src2, dst) =
+                    unpack_vmstep!(self, opcode, args, Arg, Arg, Arg)?;
+                self.instructions
+                    .push(LIRInstruction::Rem(src1?, src2?, dst?));
             }
-            ASTOpcode::Jie => {
-                let (tag, src2) = unpack_vmstep!(self, path, args, Tag, Arg);
-                self.instructions.push(LIRInstruction::Jie(tag, src2));
+            ASTOpcodeData::Cgt => {
+                let (src1, src2, dst) =
+                    unpack_vmstep!(self, opcode, args, Arg, Arg, Arg)?;
+                self.instructions
+                    .push(LIRInstruction::Cgt(src1?, src2?, dst?));
             }
-            ASTOpcode::Jne => {
-                let (tag, src2) = unpack_vmstep!(self, path, args, Tag, Arg);
-                self.instructions.push(LIRInstruction::Jne(tag, src2));
+            ASTOpcodeData::Clt => {
+                let (src1, src2, dst) =
+                    unpack_vmstep!(self, opcode, args, Arg, Arg, Arg)?;
+                self.instructions
+                    .push(LIRInstruction::Clt(src1?, src2?, dst?));
             }
-            ASTOpcode::Puti => {
-                let (src1,) = unpack_vmstep!(self, path, args, Arg);
-                self.instructions.push(LIRInstruction::Puti(src1));
+            ASTOpcodeData::Jmp => {
+                let (tag,) = unpack_vmstep!(self, opcode, args, Tag)?;
+                self.instructions.push(LIRInstruction::Jmp(tag?));
             }
-            ASTOpcode::Putc => {
-                let (src1,) = unpack_vmstep!(self, path, args, Arg);
-                self.instructions.push(LIRInstruction::Putc(src1));
+            ASTOpcodeData::Jie => {
+                let (tag, src2) = unpack_vmstep!(self, opcode, args, Tag, Arg)?;
+                self.instructions.push(LIRInstruction::Jie(tag?, src2?));
             }
-            ASTOpcode::Imz => {
-                let (dst,) = unpack_vmstep!(self, path, args, Arg);
-                self.instructions.push(LIRInstruction::Imz(dst));
+            ASTOpcodeData::Jne => {
+                let (tag, src2) = unpack_vmstep!(self, opcode, args, Tag, Arg)?;
+                self.instructions.push(LIRInstruction::Jne(tag?, src2?));
             }
-            ASTOpcode::Equ => {
-                let (src1, src2, dst) = unpack_vmstep!(self, path, args, Arg, Arg, Arg);
-                self.instructions.push(LIRInstruction::Equ(src1, src2, dst));
+            ASTOpcodeData::Puti => {
+                let (src1,) = unpack_vmstep!(self, opcode, args, Arg)?;
+                self.instructions.push(LIRInstruction::Puti(src1?));
             }
-            ASTOpcode::Cal => {
-                let (tag,) = unpack_vmstep!(self, path, args, Tag);
-                self.instructions.push(LIRInstruction::Cal(tag));
+            ASTOpcodeData::Putc => {
+                let (src1,) = unpack_vmstep!(self, opcode, args, Arg)?;
+                self.instructions.push(LIRInstruction::Putc(src1?));
             }
-            ASTOpcode::Cie => {
-                let (tag, src2) = unpack_vmstep!(self, path, args, Tag, Arg);
-                self.instructions.push(LIRInstruction::Cie(tag, src2));
+            ASTOpcodeData::Imz => {
+                let (dst,) = unpack_vmstep!(self, opcode, args, Arg)?;
+                self.instructions.push(LIRInstruction::Imz(dst?));
             }
-            ASTOpcode::Cne => {
-                let (tag, src2) = unpack_vmstep!(self, path, args, Tag, Arg);
-                self.instructions.push(LIRInstruction::Cne(tag, src2));
+            ASTOpcodeData::Equ => {
+                let (src1, src2, dst) =
+                    unpack_vmstep!(self, opcode, args, Arg, Arg, Arg)?;
+                self.instructions
+                    .push(LIRInstruction::Equ(src1?, src2?, dst?));
             }
-            ASTOpcode::Ret => {
-                assert_eq!(args.len(), 0);
+            ASTOpcodeData::Cal => {
+                let (tag,) = unpack_vmstep!(self, opcode, args, Tag)?;
+                self.instructions.push(LIRInstruction::Cal(tag?));
+            }
+            ASTOpcodeData::Cie => {
+                let (tag, src2) = unpack_vmstep!(self, opcode, args, Tag, Arg)?;
+                self.instructions.push(LIRInstruction::Cie(tag?, src2?));
+            }
+            ASTOpcodeData::Cne => {
+                let (tag, src2) = unpack_vmstep!(self, opcode, args, Tag, Arg)?;
+                self.instructions.push(LIRInstruction::Cne(tag?, src2?));
+            }
+            ASTOpcodeData::Ret => {
+                if args.len() != 0 {
+                    return Err(error!(
+                        InvalidArgumentNumber,
+                        opcode.reference.clone(),
+                        0,
+                        args.len()
+                    ));
+                }
                 self.instructions.push(LIRInstruction::Ret);
             }
-            ASTOpcode::Hlt => {
-                assert_eq!(args.len(), 0);
+            ASTOpcodeData::Hlt => {
+                if args.len() != 0 {
+                    return Err(error!(
+                        InvalidArgumentNumber,
+                        opcode.reference.clone(),
+                        0,
+                        args.len()
+                    ));
+                }
                 self.instructions.push(LIRInstruction::Hlt);
             }
         }
+        Ok(())
     }
-    pub fn generate(sources: &Vec<Source>, namespaces: &'a mut Namespaces) -> Result<LIR<'a>, ()> {
+    pub fn generate(
+        sources: &Vec<Source>,
+        namespaces: &'a mut Namespaces,
+    ) -> Result<LIR<'a>, Vec<ErrorData>> {
         let mut lir = LIR {
             instructions: vec![],
             tags: HashMap::new(),
@@ -286,37 +348,60 @@ impl<'a> LIR<'a> {
             namespaces,
         };
         // add resolved labels.
-        for map_id in lir.namespaces.private_identifiers.values() {
-            for id in map_id.values() {
-                if let IdentifierType::Variable(value) = id.idtype {
-                    lir.labels
-                        .insert(LIRLabel(id.id), LIRData::Constant(value.unwrap_or(0)));
+        for map_idents in lir.namespaces.private_identifiers.values() {
+            for ident in map_idents.values() {
+                if let IdentifierType::Variable(value) = ident.idtype {
+                    lir.labels.insert(
+                        LIRLabel(ident.uid),
+                        LIRData::Constant(value.unwrap_or(0)),
+                    );
                 }
             }
         }
-        for id in lir.namespaces.public_identifiers.values() {
-            if let IdentifierType::Variable(value) = id.idtype {
-                lir.labels
-                    .insert(LIRLabel(id.id), LIRData::Constant(value.unwrap_or(0)));
+        for ident in lir.namespaces.public_identifiers.values() {
+            if let IdentifierType::Variable(value) = ident.idtype {
+                lir.labels.insert(
+                    LIRLabel(ident.uid),
+                    LIRData::Constant(value.unwrap_or(0)),
+                );
             }
         }
         // sources have to be lowered separately still.
         // this is because the identifiers aren't fully resolved yet.
+        let mut error_data: Vec<ErrorData> = vec![];
         for source in sources {
             for instruction in &source.ast.instructions {
-                if let ASTInstruction::Tag(tag) = instruction {
-                    let tag_id = lir
-                        .namespaces
-                        .get_identifier(tag, Some(&source.path))
-                        .expect("tagg existerar ej")
-                        .id;
-                    // this computes where the tag will point to.
-                    lir.tags.insert(LIRTag(tag_id), lir.instructions.len());
-                } else if let ASTInstruction::VMStep(opcode, args) = instruction {
-                    lir.lower_instruction(&source.path, opcode, args);
+                match instruction.inner.clone() {
+                    ASTInstructionData::Tag(tag) => {
+                        let tag_uid = match lir.namespaces.resolve_identifier(
+                            &tag,
+                            instruction.reference.clone(),
+                        ) {
+                            Ok(ident) => ident.uid,
+                            Err(err) => {
+                                error_data.push(err);
+                                continue;
+                            }
+                        };
+                        // this computes where the tag will point to.
+                        lir.tags
+                            .insert(LIRTag(tag_uid), lir.instructions.len());
+                    }
+                    ASTInstructionData::VMStep(opcode, args) => {
+                        match lir.lower_instruction(&opcode, &args) {
+                            Ok(()) => (),
+                            Err(err) => {
+                                error_data.push(err);
+                            }
+                        };
+                    }
                 }
             }
         }
-        Ok(lir)
+        if error_data.is_empty() {
+            Ok(lir)
+        } else {
+            Err(error_data)
+        }
     }
 }
