@@ -161,7 +161,7 @@ impl<'a> LIR<'a> {
                 InvalidASTArgumentData,
                 ast_arg.reference.clone(),
                 "variabel".into(),
-                "".into()
+                "tagg".into()
             )),
             ASTArgumentData::Variable(x) => {
                 let ident = self
